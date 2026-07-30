@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build & test (${{ matrix.configuration }})
+    # Apple Silicon runner. Listnr targets macOS 14+, but the macos-14 runner
+    # image has been retired by GitHub — the deployment-target floor is enforced
+    # by `platforms: [.macOS(.v14)]` in Package.swift, not by the runner OS.
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration: [debug, release]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+          uname -m
+
+      - name: Cache SPM dependencies
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-spm-${{ matrix.configuration }}-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-${{ matrix.configuration }}-
+
+      - name: Resolve dependencies
+        run: swift package resolve
+
+      - name: Build
+        run: swift build -c ${{ matrix.configuration }}
+
+      # `swift test` fails outright when no test target exists, so this stays
+      # conditional until Tests/ lands. Remove the guard once it does.
+      - name: Test
+        run: |
+          if [ -d Tests ]; then
+            swift test -c ${{ matrix.configuration }}
+          else
+            echo "::warning title=No tests::No Tests/ directory yet — see CONTRIBUTING.md 'Good first issues'."
+          fi
+
+      - name: Smoke-check the CLI
+        # Subcommands that touch neither audio hardware nor permissions, so they
+        # are safe on a headless runner with no microphone.
+        if: matrix.configuration == 'debug'
+        run: |
+          .build/debug/listnr --help
+          .build/debug/listnr models list
+          .build/debug/listnr start --help
+
+  concurrency-check:
+    name: Strict concurrency
+    runs-on: macos-15
+    # Listnr has known pre-existing data races. This job surfaces them on every
+    # change so the count goes down and never up. It is advisory until the
+    # existing warnings are cleared, then flip continue-on-error to false.
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build with complete concurrency checking
+        run: swift build -Xswiftc -strict-concurrency=complete 2>&1 | tee build.log
+
+      # Dependency warnings are not ours; report only Sources/Listnr.
+      - name: Summarise diagnostics in Listnr sources
+        run: |
+          grep -E "Sources/Listnr/.*(warning|error):" build.log \
+            | sed 's|.*/Sources/Listnr/||' | sort -u > diagnostics.txt || true
+          count=$(wc -l < diagnostics.txt | tr -d ' ')
+          {
+            echo "### Strict-concurrency diagnostics in \`Sources/Listnr\`: **$count**"
+            echo
+            if [ "$count" -gt 0 ]; then
+              echo '```'
+              cat diagnostics.txt
+              echo '```'
+              echo
+              echo "Every one of these is an error under the Swift 6 language mode."
+            else
+              echo "None. :tada: Time to set \`swiftLanguageMode(.v6)\` in Package.swift."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

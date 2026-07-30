@@ -1,0 +1,170 @@
+name: Bug report
+description: Something is broken, crashes, or produces wrong output.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a report.
+
+        ⚠️ **Do not attach real meeting audio or real transcripts.** Reproduce the
+        problem with your own voice or synthetic audio. If the bug only appears
+        with particular audio, describe its characteristics instead of uploading
+        a recording of other people.
+
+        🔒 **Security problems do not belong here.** See
+        [SECURITY.md](https://github.com/rokib16x/listnr/blob/main/SECURITY.md)
+        to report privately.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you file
+      options:
+        - label: I searched [existing issues](https://github.com/rokib16x/listnr/issues?q=is%3Aissue) and this is not a duplicate.
+          required: true
+        - label: I checked the "Status / beta" section of the README and this is not an already-documented limitation.
+          required: true
+        - label: This report contains no audio or transcript of anyone other than me.
+          required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you observe, and what did you expect instead?
+      placeholder: |
+        Expected: my first word to appear in the transcript.
+        Actually: the first word is missing after every pause longer than ~2s.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Exact commands, and what you did while it was live.
+      placeholder: |
+        1. `listnr`
+        2. `/lang en`
+        3. `/live 30`
+        4. Say "hello, testing one two three", pause 3s, say "second sentence"
+        5. `/stop`
+    validations:
+      required: true
+
+  - type: dropdown
+    id: chip
+    attributes:
+      label: Chip
+      description: Apple menu → About This Mac. Intel Macs are not supported.
+      options:
+        - M1
+        - M1 Pro / Max / Ultra
+        - M2
+        - M2 Pro / Max / Ultra
+        - M3
+        - M3 Pro / Max
+        - M4
+        - M4 Pro / Max
+        - M5 or newer
+        - Intel (unsupported)
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      description: Apple menu → About This Mac. Listnr requires macOS 14 or later.
+      placeholder: "15.3.1"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Listnr version or commit
+      description: A release tag, or `git rev-parse --short HEAD` if you built from source.
+      placeholder: "v0.1.0-beta, or 4f2a1c9"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: model
+    attributes:
+      label: Transcription model
+      description: What `/status` or `--model` reports. Model choice changes accuracy and latency a lot, so this matters for almost every report.
+      options:
+        - whisper-base.en (default)
+        - whisper-small.en
+        - whisper-large-v3-turbo
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: input
+    id: language
+    attributes:
+      label: Language setting
+      description: What you passed to `/lang` or `--language`.
+      placeholder: "en, or auto, or bn"
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`listnr doctor` output"
+      description: Paste the full output. Most audio bugs turn out to be a missing permission, so this is required.
+      render: text
+      placeholder: |
+        ✓ apple silicon: ok
+        ✓ microphone: ok
+        ✗ screen recording (system audio): not granted
+            → System Settings → Privacy & Security → Screen & System Audio Recording …
+    validations:
+      required: true
+
+  - type: dropdown
+    id: lane
+    attributes:
+      label: Which lane is affected?
+      description: Lane A is your microphone ("You"). Lane B is speaker / system audio (remote people).
+      options:
+        - Lane A — my own voice / "You"
+        - Lane B — remote speakers / system audio
+        - Both lanes
+        - Neither / not audio-related (CLI, export, build, docs)
+    validations:
+      required: true
+
+  - type: input
+    id: audio-setup
+    attributes:
+      label: Audio devices
+      description: Input and output hardware. Bluetooth headsets can force an 8/16 kHz call mode that degrades capture, and open speakers leak remote voices into the mic.
+      placeholder: "Input: AirPods Pro (Bluetooth). Output: AirPods Pro."
+    validations:
+      required: true
+
+  - type: input
+    id: speakers
+    attributes:
+      label: How many people were on the call?
+      description: Including you. Leave blank if not applicable.
+      placeholder: "4 (me + 3 remote)"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Terminal output
+      description: Relevant stderr output — level meters, transcription errors, diarization messages, crash traces. Redact anything sensitive.
+      render: text
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Screenshots, related issues, or what you have already tried.

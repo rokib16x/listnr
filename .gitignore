@@ -1,0 +1,21 @@
+# Swift / SPM
+.build/
+.swiftpm/
+*.xcodeproj
+*.xcworkspace
+DerivedData/
+
+# macOS
+.DS_Store
+
+# Local agent / editor state
+.claude/
+.vscode/
+.idea/
+
+# Captured audio and exported transcripts must never be committed
+*.wav
+*.caf
+*.m4a
+listnr_*.md
+Transcripts/
