@@ -43,6 +43,27 @@ While the version is `0.x`, the CLI surface may change in any minor release.
   decision, and span loudness is measured on the span SpeakerKit found rather
   than on the padded slice — padding used to drag a real utterance under the
   threshold precisely because it had been widened.
+- **Real speech is no longer deleted by the hallucination filter.** The filter
+  rejected `okay`, `ok`, `thanks`, `thank you`, `bye`, `you`, `the`, `a`, `uh`,
+  `um`, and `hmm` outright, every one of them an ordinary thing to say in a
+  meeting. It also rejected any output of two characters or fewer, counted in
+  `Character`s, so Chinese 好的 ("okay"), Japanese はい ("yes") and Russian да
+  were discarded: the most common replies in languages `/lang` advertises could
+  never appear. Whether a clip contains speech is now decided by Whisper's own
+  per-segment `noSpeechProb`, `avgLogprob`, and `compressionRatio`, which is a
+  judgement the text cannot make. What remains text-based is limited to output
+  that is not speech in any language: decoder tokens, bracketed stage
+  directions, and caption artifacts such as "thanks for watching".
+- **Cleanup no longer corrupts legitimate text.** Three rules were rewriting
+  real transcripts: `\(...\)` deleted parenthesised speech, so "the API (v2)
+  ships" lost its version; `\*...\*` did the same between asterisks; and
+  `\.\d{2,}` stripped the decimal part of every number, turning "version 3.14"
+  into "version 3" and "$19.99" into "$19". Bracket, paren, and asterisk
+  contents are now removed only when the content is actually a non-speech
+  annotation, and the trailing-digit rule requires a letter before the period
+  and end of string, so "Thank you.000" is cleaned while decimals survive.
+- Text cleanup and non-speech detection moved into `TranscriptText`, which has
+  no WhisperKit dependency, so the rules are readable and directly testable.
 - **Ctrl+C at the idle prompt works, and no longer kills the next session.** The
   signal handler was queued on the main queue, which is blocked while the prompt
   waits for input — so Ctrl+C did nothing, then fired later and cancelled the
@@ -89,6 +110,7 @@ current list. The significant ones in this release:
   very long sessions are memory-hungry.
 - Voice activity thresholds are fixed absolute values and may need tuning for
   unusually quiet or hot microphones.
+- Settings changed in the shell do not persist across runs.
 - No automated test suite yet.
 
 [Unreleased]: https://github.com/rokib16x/listnr/compare/v0.1.0-beta...HEAD

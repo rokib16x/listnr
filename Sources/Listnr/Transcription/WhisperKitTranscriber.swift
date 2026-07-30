@@ -100,62 +100,53 @@ actor WhisperKitTranscriber: Transcriber {
         }
 
         let results = try await pipeline.transcribe(audioArray: audio, decodeOptions: options)
-        let raw = results.map(\.text).joined(separator: " ")
-        return Self.sanitize(raw)
+
+        // Filter on Whisper's own per-segment confidence rather than on the
+        // words it produced. This is the check a string comparison cannot make:
+        // when the decoder is guessing at silence it says so here, via a high
+        // no-speech probability and a poor average log-probability, whether the
+        // guess comes out as "Thank you" or as anything else.
+        let kept = results
+            .flatMap(\.segments)
+            .filter { Self.confidence.accepts($0) }
+            .map(\.text)
+
+        // No segment metadata at all: fall back to the joined text rather than
+        // discarding a real transcription.
+        let raw = results.allSatisfy(\.segments.isEmpty)
+            ? results.map(\.text).joined(separator: " ")
+            : kept.joined(separator: " ")
+
+        let cleaned = TranscriptText.clean(raw)
+        return TranscriptText.isNonSpeech(cleaned) ? "" : cleaned
     }
 
-    static func sanitize(_ text: String) -> String {
-        let patterns = [
-            #"\[[^\]]*\]"#,
-            #"\([^)]*\)"#,
-            #"<\|[^|]*\|>"#,
-            #"\*[^*]*\*"#,
-        ]
-        var out = text
-        for p in patterns {
-            out = out.replacingOccurrences(of: p, with: " ", options: .regularExpression)
+    /// Thresholds for accepting a decoded segment.
+    ///
+    /// The no-speech and log-probability tests are combined with AND, matching
+    /// the reference Whisper implementation: either signal alone fires often
+    /// enough on quiet or accented speech that OR would cut real content.
+    /// Degenerate repetition is an independent signal, so the compression ratio
+    /// stands on its own.
+    struct Confidence {
+        var maxNoSpeechProb: Float = 0.7
+        var minAvgLogProb: Float = -0.9
+        var maxCompressionRatio: Float = 2.6
+
+        func accepts(noSpeechProb: Float, avgLogProb: Float, compressionRatio: Float) -> Bool {
+            if compressionRatio > maxCompressionRatio { return false }
+            if noSpeechProb > maxNoSpeechProb && avgLogProb < minAvgLogProb { return false }
+            return true
         }
-        // Strip stray numeric junk like "Thank you.000"
-        out = out.replacingOccurrences(of: #"\.\d{2,}"#, with: "", options: .regularExpression)
-        out = out.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
-        out = out.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if isHallucination(out) { return "" }
-        return out
+        func accepts(_ segment: TranscriptionSegment) -> Bool {
+            accepts(
+                noSpeechProb: segment.noSpeechProb,
+                avgLogProb: segment.avgLogprob,
+                compressionRatio: segment.compressionRatio
+            )
+        }
     }
 
-    /// Common Whisper silence / junk outputs.
-    static func isHallucination(_ text: String) -> Bool {
-        let t = text.lowercased()
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .trimmingCharacters(in: CharacterSet(charactersIn: ".!?,…"))
-        let banned: Set<String> = [
-            "thank you",
-            "thanks",
-            "thanks for watching",
-            "thank you for watching",
-            "please subscribe",
-            "subscribe",
-            "you",
-            "the",
-            "a",
-            "uh",
-            "um",
-            "hmm",
-            "okay",
-            "ok",
-            "bye",
-            "goodbye",
-            "music",
-            "applause",
-            "silence",
-            "blank audio",
-            ".",
-            "",
-        ]
-        if banned.contains(t) { return true }
-        // Very short English-only stubs when we expect speech
-        if t.count <= 2 { return true }
-        return false
-    }
+    static let confidence = Confidence()
 }

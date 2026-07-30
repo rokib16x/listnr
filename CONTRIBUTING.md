@@ -70,7 +70,8 @@ The pure, easily testable pieces are:
 |---|---|
 | `EnergyVAD` | Onset retention across a pause; transient rejection (clicks vs short words); segment boundaries; `maxSpeechSeconds` splitting; stability across buffer sizes |
 | `WAVWriter` | Byte-exact header; round-trip through `AVAudioFile` |
-| `WhisperKitTranscriber.sanitize` / `isHallucination` | Table-driven cases, including CJK and Bangla input |
+| `TranscriptText.clean` / `isNonSpeech` | Table-driven cases: CJK and Bangla replies, decimals, parenthesised acronyms, `[MUSIC]` markers |
+| `WhisperKitTranscriber.Confidence` | Accept/reject at each threshold boundary |
 | `TranscriptMerger.merge` | Ordering, and stability across equal timestamps |
 | `LanguageMode.parse`, `SessionOptions.resolveModel` | Valid, invalid, and conflicting inputs |
 
