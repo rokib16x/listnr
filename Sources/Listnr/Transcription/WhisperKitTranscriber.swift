@@ -1,5 +1,7 @@
 import Foundation
-import WhisperKit
+// @preconcurrency: WhisperKit's pipeline type is not Sendable-annotated, and
+// older Swift toolchains (like CI's) flag it crossing into this actor.
+@preconcurrency import WhisperKit
 
 actor WhisperKitTranscriber: Transcriber {
     let modelID: String

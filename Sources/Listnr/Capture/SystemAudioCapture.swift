@@ -1,4 +1,6 @@
-import AVFoundation
+// @preconcurrency: AVFAudio predates Sendable annotations, and older Swift
+// toolchains (like CI's) flag its types crossing isolation without it.
+@preconcurrency import AVFoundation
 import CoreMedia
 import Foundation
 import ScreenCaptureKit
@@ -26,7 +28,10 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     static let nativeSampleRate = 48_000
     static let targetSampleRate: Double = 16_000
 
-    private static let targetFormat = AVAudioFormat(
+    // An instance property, not a static: AVAudioFormat's Sendable status
+    // differs across SDK versions, and a shared static trips strict
+    // concurrency on the older ones.
+    private let targetFormat = AVAudioFormat(
         commonFormat: .pcmFormatFloat32,
         sampleRate: SystemAudioCapture.targetSampleRate,
         channels: 1,
@@ -176,7 +181,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         guard frames > 0 else { return nil }
 
         if converter == nil || converterInputFormat != inputFormat {
-            converter = AVAudioConverter(from: inputFormat, to: Self.targetFormat)
+            converter = AVAudioConverter(from: inputFormat, to: targetFormat)
             converterInputFormat = inputFormat
             if converter == nil {
                 FileHandle.standardError.write(Data(
@@ -219,7 +224,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
             let ratio = Self.targetSampleRate / inputFormat.sampleRate
             let capacity = AVAudioFrameCount(Double(frames) * ratio) + 1024
             guard let outBuffer = AVAudioPCMBuffer(
-                pcmFormat: Self.targetFormat,
+                pcmFormat: targetFormat,
                 frameCapacity: capacity
             ) else { return nil }
 

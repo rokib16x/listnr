@@ -1,7 +1,10 @@
 import Foundation
 
 /// In-memory meeting transcript + Markdown export (M4 foundation; used from M2+).
-final class MeetingSession {
+///
+/// `@unchecked Sendable` is sound here: every read and write of the mutable
+/// state (`lines`, `startedAt`) happens under `lock`.
+final class MeetingSession: @unchecked Sendable {
     static let shared = MeetingSession()
 
     private(set) var lines: [TranscriptLine] = []

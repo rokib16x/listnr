@@ -1,4 +1,6 @@
-import AVFoundation
+// @preconcurrency: see ConverterFeed.swift; the import must be consistent
+// across the files sharing its AVFoundation-typed API.
+@preconcurrency import AVFoundation
 import Foundation
 
 /// Lane A, the microphone. Captures 16 kHz mono Float32 while running.

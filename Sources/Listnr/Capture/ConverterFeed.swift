@@ -1,4 +1,6 @@
-import AVFoundation
+// @preconcurrency must match the import in every file that touches this
+// type's AVFoundation-typed API, or the symbol mangling diverges at link time.
+@preconcurrency import AVFoundation
 import Foundation
 
 /// Feeds a single already-filled buffer to `AVAudioConverter` exactly once.

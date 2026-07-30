@@ -1,7 +1,33 @@
 import Foundation
 
+/// Carries the session task's result across the semaphore hand-off in
+/// `runBlocking`. Captured `var`s would race under older strict-concurrency
+/// checkers; the lock makes the ordering explicit.
+private final class OutcomeBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedOutcome: LiveSessionRunner.Outcome?
+    private var storedError: Error?
+
+    func store(outcome: LiveSessionRunner.Outcome?, error: Error?) {
+        lock.lock()
+        storedOutcome = outcome
+        storedError = error
+        lock.unlock()
+    }
+
+    var value: (outcome: LiveSessionRunner.Outcome?, error: Error?) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (storedOutcome, storedError)
+    }
+}
+
 /// Runs one dual-lane listening session (timed or until `requestStop()` / Task cancel).
-final class LiveSessionRunner {
+///
+/// `@unchecked Sendable` is sound here: the stop flags and `runningTask` are
+/// only touched under `stopLock`, `options` is immutable, and everything else
+/// is owned by the single session task created in `runBlocking`.
+final class LiveSessionRunner: @unchecked Sendable {
     struct Outcome {
         let lines: [TranscriptLine]
         let result: DualCaptureSession.Result
@@ -62,24 +88,23 @@ final class LiveSessionRunner {
     /// Pump the main run loop while the async session runs (needed for SCK / AVAudio).
     func runBlocking() throws -> Outcome {
         let sem = DispatchSemaphore(value: 0)
-        var outcome: Outcome?
-        var error: Error?
+        let box = OutcomeBox()
 
         let task = Task {
             do {
                 try Task.checkCancellation()
-                outcome = try await run()
+                box.store(outcome: try await run(), error: nil)
             } catch is CancellationError {
-                error = CancellationError()
+                box.store(outcome: nil, error: CancellationError())
                 FileHandle.standardError.write(Data("\n○ cancelled\n".utf8))
             } catch let caught {
                 // Map to "cancelled" only on a real abort. A graceful /stop must
                 // not swallow a genuine failure that happened after the keypress.
                 if wasCancelled {
-                    error = CancellationError()
+                    box.store(outcome: nil, error: CancellationError())
                     FileHandle.standardError.write(Data("\n○ cancelled\n".utf8))
                 } else {
-                    error = caught
+                    box.store(outcome: nil, error: caught)
                 }
             }
             sem.signal()
@@ -97,6 +122,7 @@ final class LiveSessionRunner {
         runningTask = nil
         stopLock.unlock()
 
+        let (outcome, error) = box.value
         if let error {
             if error is CancellationError {
                 throw LiveSessionError.cancelled
