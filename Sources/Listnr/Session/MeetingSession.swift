@@ -8,10 +8,12 @@ final class MeetingSession {
     private(set) var startedAt = Date()
     private let lock = NSLock()
 
-    func replace(lines: [TranscriptLine]) {
+    func replace(lines: [TranscriptLine], startedAt: Date) {
         lock.lock()
         self.lines = lines
-        self.startedAt = Date()
+        // The caller's session start, not Date(): this stamps the export
+        // header and filename, and finalize runs at the *end* of a session.
+        self.startedAt = startedAt
         lock.unlock()
     }
 

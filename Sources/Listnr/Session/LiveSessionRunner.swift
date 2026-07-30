@@ -10,6 +10,8 @@ final class LiveSessionRunner {
 
     private let options: SessionOptions
     private var stopRequested = false
+    private var cancelRequested = false
+    private var captureStarted = false
     private let stopLock = NSLock()
     private var runningTask: Task<Void, Never>?
 
@@ -17,10 +19,22 @@ final class LiveSessionRunner {
         self.options = options
     }
 
-    /// Stop capture loop **and** cancel in-flight model download / load.
+    /// Finish the session gracefully: capture stops and the transcript is
+    /// finalized. Before capture has begun (model download / load) there is
+    /// nothing to finalize, so stopping there cancels the task to abort the
+    /// download instead of letting it run to completion.
     func requestStop() {
         stopLock.lock()
         stopRequested = true
+        let task = captureStarted ? nil : runningTask
+        stopLock.unlock()
+        task?.cancel()
+    }
+
+    /// Abort the session: capture stops and the transcript is discarded.
+    func requestCancel() {
+        stopLock.lock()
+        cancelRequested = true
         let task = runningTask
         stopLock.unlock()
         task?.cancel()
@@ -29,7 +43,20 @@ final class LiveSessionRunner {
     private var shouldStop: Bool {
         stopLock.lock()
         defer { stopLock.unlock() }
-        return stopRequested || Task.isCancelled
+        return stopRequested || cancelRequested || Task.isCancelled
+    }
+
+    /// True only for an abort (Ctrl+C or Task cancel), never for a graceful /stop.
+    private var wasCancelled: Bool {
+        stopLock.lock()
+        defer { stopLock.unlock() }
+        return cancelRequested || Task.isCancelled
+    }
+
+    private func markCaptureStarted() {
+        stopLock.lock()
+        captureStarted = true
+        stopLock.unlock()
     }
 
     /// Pump the main run loop while the async session runs (needed for SCK / AVAudio).
@@ -46,7 +73,9 @@ final class LiveSessionRunner {
                 error = CancellationError()
                 FileHandle.standardError.write(Data("\n○ cancelled\n".utf8))
             } catch let caught {
-                if shouldStop || Task.isCancelled {
+                // Map to "cancelled" only on a real abort. A graceful /stop must
+                // not swallow a genuine failure that happened after the keypress.
+                if wasCancelled {
                     error = CancellationError()
                     FileHandle.standardError.write(Data("\n○ cancelled\n".utf8))
                 } else {
@@ -75,7 +104,7 @@ final class LiveSessionRunner {
             throw error
         }
         guard let outcome else {
-            throw shouldStop ? LiveSessionError.cancelled : LiveSessionError.noResult
+            throw wasCancelled ? LiveSessionError.cancelled : LiveSessionError.noResult
         }
         return outcome
     }
@@ -106,6 +135,15 @@ final class LiveSessionRunner {
             othersLane = LaneTranscriber(speakerLabel: "Others", transcriber: t, speechThreshold: 0.022, minSegmentRMS: 0.025)
         }
 
+        // Whatever path leaves this function, the lane pipelines must be torn
+        // down, or every failed / cancelled session leaks two detached tasks
+        // and their buffered audio for the life of the shell. `abandon()` is
+        // idempotent, so this is safe after a normal `finish()` too.
+        defer {
+            youLane?.abandon()
+            othersLane?.abandon()
+        }
+
         let durationLabel = options.seconds.map { String(format: "%.0fs", $0) } ?? "until stop"
         let langNote: String = {
             switch options.language {
@@ -116,9 +154,11 @@ final class LiveSessionRunner {
         FileHandle.standardError.write(Data(
             "● live · \(durationLabel) · model=\(model.id) · lang=\(langNote) · speakers≈\(options.remoteSpeakers)\n".utf8
         ))
-        FileHandle.standardError.write(Data(
-            "  /stop or q + Enter to finish · Ctrl+C cancels\n\n".utf8
-        ))
+        // The stop/cancel key hints differ per mode (shell vs one-shot), so the
+        // caller supplies them.
+        if let hint = options.controlsHint {
+            FileHandle.standardError.write(Data("  \(hint)\n\n".utf8))
+        }
 
         // Small pause so Core Audio settles after heavy ANE model load.
         try await Task.sleep(nanoseconds: 300_000_000)
@@ -161,30 +201,35 @@ final class LiveSessionRunner {
 
         // Start system audio first, then mic (more reliable after SCK permission / ANE load).
         do {
-            try await session.startSystemThenMic()
+            do {
+                try await session.startSystemThenMic()
+            } catch {
+                // Fallback to original order.
+                try await session.start()
+            }
         } catch {
-            // Fallback to original order.
-            try await session.start()
+            meter.cancel()
+            throw error
         }
+        markCaptureStarted()
+        let sessionStartedAt = Date()
 
         let deadline: Date? = options.seconds.map { Date().addingTimeInterval($0) }
         while !shouldStop {
-            try Task.checkCancellation()
             if let deadline, Date() >= deadline { break }
-            try await Task.sleep(nanoseconds: 50_000_000)
+            // Not `try`: a graceful /stop cancels nothing, but a Ctrl+C does,
+            // and a throw here would discard the session instead of letting the
+            // cancel path below decide what to keep.
+            try? await Task.sleep(nanoseconds: 50_000_000)
         }
 
         meter.cancel()
         FileHandle.standardError.write(Data("\n".utf8))
 
-        if Task.isCancelled && options.seconds == nil {
-            // Still finalize whatever we have if user stopped mid-session after capture started.
-        }
-
         let result = await session.stop()
 
-        // Cancelled during download/warmup before useful audio, so bail without a report.
-        if Task.isCancelled, result.durationSeconds < 0.5, result.mic.count < 8_000 {
+        // Aborted before any useful audio existed, so bail without a report.
+        if wasCancelled, result.durationSeconds < 0.5, result.mic.count < 8_000 {
             throw CancellationError()
         }
 
@@ -198,17 +243,28 @@ final class LiveSessionRunner {
         ))
 
         if options.dumpWav {
+            // Not /tmp: that is world-readable at predictable paths, so raw
+            // meeting audio was exposed to every local user on a shared Mac.
+            let dir = MeetingSession.defaultMeetingsDir().appendingPathComponent("debug", isDirectory: true)
             do {
-                try WAVWriter.write(samples: result.mic, sampleRate: 16_000, to: "/tmp/listnr-mic.wav")
-                try WAVWriter.write(samples: result.system, sampleRate: 16_000, to: "/tmp/listnr-sys.wav")
-                FileHandle.standardError.write(Data("  wrote /tmp/listnr-mic.wav + /tmp/listnr-sys.wav\n".utf8))
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let micURL = dir.appendingPathComponent("listnr-mic.wav")
+                let sysURL = dir.appendingPathComponent("listnr-sys.wav")
+                try WAVWriter.write(samples: result.mic, sampleRate: 16_000, to: micURL.path)
+                try WAVWriter.write(samples: result.system, sampleRate: 16_000, to: sysURL.path)
+                for url in [micURL, sysURL] {
+                    try FileManager.default.setAttributes(
+                        [.posixPermissions: 0o600], ofItemAtPath: url.path
+                    )
+                }
+                FileHandle.standardError.write(Data("  wrote \(micURL.path) + \(sysURL.path)\n".utf8))
             } catch {
                 FileHandle.standardError.write(Data("  wav write failed: \(error)\n".utf8))
             }
         }
 
         var allLines: [TranscriptLine] = []
-        if options.transcribe, let youLane, let othersLane, let sharedTranscriber, !Task.isCancelled {
+        if options.transcribe, let youLane, let othersLane, let sharedTranscriber, !wasCancelled {
             allLines = await finalizeTranscript(
                 youLane: youLane,
                 othersLane: othersLane,
@@ -216,13 +272,20 @@ final class LiveSessionRunner {
                 result: result
             )
             TranscriptMerger.printAll(allLines)
-            MeetingSession.shared.replace(lines: allLines)
+            MeetingSession.shared.replace(lines: allLines, startedAt: sessionStartedAt)
         }
 
         var saved: String?
-        if !allLines.isEmpty, let path = try? MeetingSession.shared.exportMarkdown() {
-            FileHandle.standardError.write(Data("  saved \(path)\n".utf8))
-            saved = path
+        if !allLines.isEmpty {
+            do {
+                let path = try MeetingSession.shared.exportMarkdown()
+                FileHandle.standardError.write(Data("  saved \(path)\n".utf8))
+                saved = path
+            } catch {
+                FileHandle.standardError.write(Data(
+                    "! could not save transcript: \(error.localizedDescription)\n".utf8
+                ))
+            }
         }
 
         return Outcome(lines: allLines, result: result, savedPath: saved)
@@ -235,32 +298,33 @@ final class LiveSessionRunner {
         result: DualCaptureSession.Result
     ) async -> [TranscriptLine] {
         // Lane A and Lane B start milliseconds apart, so each lane's
-        // sample-count timestamps sit on its own zero. Shift both onto a shared
-        // session clock before merging, or the transcript interleaves wrongly.
+        // sample-count timestamps sit on its own zero. Everything below stays
+        // in lane time; both lanes are shifted onto the shared session clock
+        // exactly once, at the merge.
         let offsets = result.laneOffsets
 
-        var you = TranscriptMerger.shift(await youLane.finish(), by: offsets.mic)
-        _ = await othersLane.finish()
-
+        var you = await youLane.finish()
         if you.isEmpty, AudioMath.rms(result.mic) >= 0.008 {
             if let text = try? await transcriber.transcribe(result.mic), !text.isEmpty {
                 you = [TranscriptLine(speaker: "You", startSeconds: 0, text: text)]
             }
         }
 
+        // Lane B, in order of preference: diarized per-span lines, then the
+        // timestamped lines the live lane already transcribed, and only as a
+        // last resort one whole-buffer blob at 00:00.
+        let liveOthers = await othersLane.finish()
+        let systemRMS = AudioMath.rms(result.system)
+
         var remote: [TranscriptLine] = []
-        if options.diarize, AudioMath.rms(result.system) >= 0.008 {
+        if options.diarize, systemRMS >= 0.008 {
             FileHandle.standardError.write(Data("\ndiarizing Lane B (remote speakers)...\n".utf8))
             let diarizer = RemoteDiarizer(speakerHint: options.remoteSpeakers)
             do {
                 try await diarizer.warmUp()
                 let spans = try await diarizer.diarize(result.system)
                 FileHandle.standardError.write(Data("  found \(spans.count) remote speech span(s)\n".utf8))
-                if spans.isEmpty {
-                    if let text = try? await transcriber.transcribe(result.system), !text.isEmpty {
-                        remote = [TranscriptLine(speaker: "Others", startSeconds: 0, text: text)]
-                    }
-                } else {
+                if !spans.isEmpty {
                     remote = await DiarizedTranscriber.transcribeSpans(
                         audio: result.system,
                         spans: spans,
@@ -268,18 +332,24 @@ final class LiveSessionRunner {
                     )
                 }
             } catch {
-                FileHandle.standardError.write(Data("diarization failed: \(error.localizedDescription), falling back to Others\n".utf8))
-                if let text = try? await transcriber.transcribe(result.system), !text.isEmpty {
-                    remote = [TranscriptLine(speaker: "Others", startSeconds: 0, text: text)]
-                }
+                FileHandle.standardError.write(Data(
+                    "diarization failed: \(error.localizedDescription), keeping the live Others lines\n".utf8
+                ))
             }
-        } else if AudioMath.rms(result.system) >= 0.008 {
+        }
+        if remote.isEmpty {
+            remote = liveOthers
+        }
+        if remote.isEmpty, systemRMS >= 0.008 {
             if let text = try? await transcriber.transcribe(result.system), !text.isEmpty {
                 remote = [TranscriptLine(speaker: "Others", startSeconds: 0, text: text)]
             }
         }
 
-        return TranscriptMerger.merge([you, TranscriptMerger.shift(remote, by: offsets.system)])
+        return TranscriptMerger.merge([
+            TranscriptMerger.shift(you, by: offsets.mic),
+            TranscriptMerger.shift(remote, by: offsets.system),
+        ])
     }
 }
 

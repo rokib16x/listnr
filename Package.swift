@@ -6,7 +6,10 @@ let package = Package(
     platforms: [.macOS(.v14)],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
-        .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "0.9.0"),
+        // WhisperKit does not promise API stability across 0.x minors, and the
+        // code compiles against 0.18 surface (TranscriptionSegment confidence
+        // fields, SpeakerKit's ModelManager). Stay within the tested minor.
+        .package(url: "https://github.com/argmaxinc/WhisperKit.git", .upToNextMinor(from: "0.18.0")),
     ],
     targets: [
         .executableTarget(

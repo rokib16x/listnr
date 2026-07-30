@@ -89,7 +89,7 @@ where there is no microphone, no ANE, and no permissions.
 ## Concurrency: please read this before touching the audio path
 
 Listnr had **known data races**, and they were the source of most of its real
-bugs. Four strict-concurrency diagnostics remain (see below). Do not add more.
+bugs. The strict-concurrency diagnostic count is now **zero**. Keep it there.
 
 Check your work before opening a PR:
 
@@ -97,11 +97,10 @@ Check your work before opening a PR:
 swift build -Xswiftc -strict-concurrency=complete
 ```
 
-As of the latest commit this reports **4** remaining warnings, all in
-`MeetingSession`, `LiveSessionRunner`, `Listnr.swift`, and
-`WhisperKitTranscriber`. **Do not add new ones**, and
-please do not "fix" them with `@unchecked Sendable` or `nonisolated(unsafe)`
-unless you can explain in the PR why the access is genuinely safe.
+As of the latest commit this reports **no** warnings in `Sources/Listnr`.
+**Do not add any**, and please do not silence one with `@unchecked Sendable`
+or `nonisolated(unsafe)` unless you can explain in the PR why the access is
+genuinely safe. CI reports the count on every push.
 
 Three rules specific to this codebase:
 

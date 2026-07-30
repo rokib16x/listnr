@@ -45,6 +45,9 @@ struct SessionOptions {
     var diarize: Bool = true
     /// nil = run until stop
     var seconds: Double? = nil
+    /// One line of key hints shown when the session goes live; set by the
+    /// caller because shell and one-shot mode stop differently.
+    var controlsHint: String?
 
     mutating func applyLanguage(_ mode: LanguageMode) {
         language = mode

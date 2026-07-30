@@ -68,10 +68,8 @@ jobs:
   concurrency-check:
     name: Strict concurrency
     runs-on: macos-15
-    # Listnr has known pre-existing data races. This job surfaces them on every
-    # change so the count goes down and never up. It is advisory until the
-    # existing warnings are cleared, then flip continue-on-error to false.
-    continue-on-error: true
+    # The diagnostic count in Sources/Listnr reached zero in 0.1.1-beta. This
+    # job now enforces it: any new strict-concurrency warning fails the build.
 
     steps:
       - uses: actions/checkout@v5
@@ -95,6 +93,10 @@ jobs:
               echo
               echo "Every one of these is an error under the Swift 6 language mode."
             else
-              echo "None. :tada: Time to set \`swiftLanguageMode(.v6)\` in Package.swift."
+              echo "None. :tada:"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$count" -gt 0 ]; then
+            echo "::error title=Strict concurrency::$count new diagnostic(s) in Sources/Listnr; the count must stay at zero."
+            exit 1
+          fi

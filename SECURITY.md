@@ -77,11 +77,10 @@ These are documented, intended behaviours, not vulnerabilities:
 - **Transcripts are written unencrypted** to `~/Documents/Listnr/`. They are
   protected by your user account's file permissions and nothing more. There is
   no automatic retention limit, so delete them yourself.
-- **`/dump` writes raw session audio to `/tmp`** at fixed paths
-  (`/tmp/listnr-mic.wav`, `/tmp/listnr-sys.wav`). `/tmp` is world-readable on
-  macOS, so on a shared Mac other local users can read those files. This is a
-  known defect scheduled for the next release; until then, treat `/dump` as a
-  debugging tool for single-user machines only.
+- **`/dump` writes raw session audio** to `~/Documents/Listnr/debug/` with
+  owner-only permissions (0600). Earlier builds wrote to world-readable fixed
+  paths in `/tmp`; if you ever used `/dump` before 0.1.1-beta, delete
+  `/tmp/listnr-mic.wav` and `/tmp/listnr-sys.wav` if they still exist.
 - **Model weights are downloaded from Hugging Face on first run.** That network
   request is the only outbound traffic Listnr makes. No audio, transcript, or
   telemetry is ever transmitted. See the README for details and how to run fully

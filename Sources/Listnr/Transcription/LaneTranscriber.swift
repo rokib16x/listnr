@@ -154,6 +154,16 @@ final class LaneTranscriber {
         return await store.sorted
     }
 
+    /// Tear the pipeline down without draining it. For sessions that fail or
+    /// are cancelled before `finish()`, where the alternative is two detached
+    /// tasks awaiting a stream forever. Idempotent, and harmless after a normal
+    /// `finish()`.
+    func abandon() {
+        audio.finish()
+        vadTask.cancel()
+        asrTask.cancel()
+    }
+
     private func reportDrops() {
         let audioLost = audioDrops.count
         let segmentsLost = segmentDrops.count

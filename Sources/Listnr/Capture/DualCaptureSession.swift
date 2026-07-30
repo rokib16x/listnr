@@ -132,12 +132,4 @@ final class DualCaptureSession {
             systemFirstSampleTime: systemAnchor
         )
     }
-
-    /// Capture for a fixed duration (M1 verification helper).
-    func capture(seconds: Double) async throws -> Result {
-        try await start()
-        let ns = UInt64(max(seconds, 0.1) * 1_000_000_000)
-        try await Task.sleep(nanoseconds: ns)
-        return await stop()
-    }
 }

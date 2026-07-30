@@ -94,9 +94,7 @@ What gets written to disk:
 | Transcripts | `~/Documents/Listnr/listnr_*.md` | **Not encrypted.** Nothing deletes them for you. |
 | Models | WhisperKit's model cache | Reused across sessions. |
 | Config | `~/Library/Application Support/listnr/config.json` | Read, but currently never written. |
-| `/dump` audio | `/tmp/listnr-mic.wav`, `/tmp/listnr-sys.wav` | See the warning below. |
-
-> **Known privacy defect:** `/dump` writes raw meeting audio to `/tmp` at predictable filenames, and `/tmp` is world-readable on macOS. On a shared Mac, other local users can read it. Treat `/dump` as a single-user debugging tool until this is fixed. It is on the list for the next release.
+| `/dump` audio | `~/Documents/Listnr/debug/listnr-*.wav` | Raw session audio, written with owner-only permissions (0600). Delete after debugging. |
 
 ---
 
@@ -174,7 +172,7 @@ Set the language explicitly rather than using `auto`. Auto-detection is slower a
 ```text
 listnr> /speakers 2        # how many remote people to expect (1-6)
 listnr> /model whisper-small.en
-listnr> /dump              # toggle WAV dumps to /tmp (read the privacy note first)
+listnr> /dump              # toggle WAV dumps to ~/Documents/Listnr/debug
 listnr> /diarize           # toggle SpeakerKit
 listnr> /status
 listnr> /help

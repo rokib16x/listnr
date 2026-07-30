@@ -10,6 +10,36 @@ While the version is `0.x`, the CLI surface may change in any minor release.
 
 ### Fixed
 
+- **`/stop` and `q` now finish the session and produce the transcript.** The
+  stop request cancelled the underlying task, the same mechanism Ctrl+C uses,
+  so a graceful stop was indistinguishable from an abort: the wait loop threw
+  from its sleep, finalization was skipped, and the captured meeting was
+  discarded with a "cancelled" message. Stop and cancel are now separate
+  requests. The same defect made an untimed `listnr start` unable to ever
+  produce a transcript, since Ctrl+C was its only exit; the first Ctrl+C in
+  one-shot mode now finishes gracefully and a second force-quits.
+- **Failed or cancelled sessions no longer leak the transcription pipelines.**
+  Each lane's VAD and ASR tasks were only shut down on the success path, so
+  every session that errored or was cancelled left two detached tasks and
+  their buffered audio alive for the life of the shell. Teardown now runs on
+  every exit path.
+- **With diarization off or failed, Lane B keeps its per-utterance
+  timestamps.** The lines the live lane had already transcribed were always
+  discarded, and the whole system buffer was re-transcribed as a single block
+  timestamped 00:00, which both doubled the work and interleaved wrongly with
+  the mic lane. The merged transcript now prefers diarized spans, then the
+  live lane's timestamped lines, and falls back to a whole-buffer pass only
+  when both are empty.
+- **Whole-buffer fallback lines are placed on the shared session clock.** The
+  mic fallback line was created after the lane shift and so missed its
+  offset. Both lanes now stay in lane time until a single shift at the merge.
+- **A failure after a stop request is reported as that failure**, not
+  silently rewritten as "cancelled". Only a real abort maps to the cancel
+  message.
+- The "Recorded" header and filename of an exported transcript now use the
+  session's start time; they previously stamped the moment the session ended.
+- A transcript export failure now prints the reason instead of failing
+  silently.
 - **Audio is no longer processed out of order.** Each lane spawned an
   unstructured `Task` per captured buffer to hand it to the VAD. Unstructured
   tasks have no ordering guarantee, so under load (exactly when Whisper is busy)
@@ -73,6 +103,24 @@ While the version is `0.x`, the CLI surface may change in any minor release.
   main thread and a `readabilityHandler` on the same descriptor could each
   consume the other's line. A single reader thread now owns stdin and buffers
   anything the live session does not consume.
+
+### Security
+
+- **`/dump` no longer writes meeting audio to `/tmp`.** The WAV dumps were at
+  fixed, world-readable paths that any local user on a shared Mac could read.
+  They now go to `~/Documents/Listnr/debug/` with owner-only permissions
+  (0600). If you used `/dump` with an earlier build, delete
+  `/tmp/listnr-mic.wav` and `/tmp/listnr-sys.wav` if present.
+
+### Changed
+
+- WhisperKit is pinned to `0.18.x` (`.upToNextMinor`) instead of any version
+  from 0.9 up, since the code compiles against 0.18 APIs and WhisperKit does
+  not promise stability across 0.x minors.
+- Removed the unused fixed-duration capture helper left over from early
+  milestone verification.
+- Strict-concurrency diagnostics in `Sources/Listnr` are down from 4 to
+  **zero**, and the CI job that tracked them now fails on any new one.
 
 ## [0.1.0-beta] - 2026-07-31
 

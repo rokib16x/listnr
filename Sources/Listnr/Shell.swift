@@ -87,7 +87,7 @@ struct Shell: ParsableCommand {
                 Darwin.exit(130)
             }
             FileHandle.standardError.write(Data("\n⌃C, cancelling (download/live)...  press Ctrl+C again to force quit\n".utf8))
-            runner.requestStop()
+            runner.requestCancel()
         }
         sigint.resume()
 
@@ -178,6 +178,7 @@ struct Shell: ParsableCommand {
                     liveOpts.seconds = nil
                 }
 
+                liveOpts.controlsHint = "/stop or q + Enter to finish · Ctrl+C cancels"
                 let runner = LiveSessionRunner(options: liveOpts)
                 state.runner = runner
 
@@ -240,7 +241,7 @@ struct Shell: ParsableCommand {
                                     (auto is slower and often mis-detects short speech)
               /speakers N        remote speaker hint (1-6)
               /model <id>        whisper-base.en | whisper-small.en | whisper-large-v3-turbo
-              /dump              toggle WAV dump to /tmp
+              /dump              toggle WAV dump to ~/Documents/Listnr/debug
               /diarize           toggle SpeakerKit on Lane B
               /status            show current options
               /help              this help

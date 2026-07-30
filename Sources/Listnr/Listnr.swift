@@ -23,7 +23,7 @@ struct Start: ParsableCommand {
     @Option(name: .long, help: "Capture for N seconds. Omit to run until Ctrl+C.")
     var seconds: Double?
 
-    @Flag(name: .long, help: "Write /tmp/listnr-mic.wav and /tmp/listnr-sys.wav.")
+    @Flag(name: .long, help: "Write listnr-mic.wav and listnr-sys.wav to ~/Documents/Listnr/debug.")
     var dumpWav: Bool = false
 
     @Flag(name: .long, help: "Disable Whisper transcription (capture only).")
@@ -71,6 +71,7 @@ struct Start: ParsableCommand {
             throw ExitCode(1)
         }
 
+        options.controlsHint = "Ctrl+C to finish · Ctrl+C twice to force quit"
         let runner = LiveSessionRunner(options: options)
         let interrupts = InterruptCounter()
 
@@ -84,7 +85,9 @@ struct Start: ParsableCommand {
                 FileHandle.standardError.write(Data("\n⌃C again: force quit\n".utf8))
                 Darwin.exit(130)
             }
-            FileHandle.standardError.write(Data("\n⌃C, cancelling...  press Ctrl+C again to force quit\n".utf8))
+            // First Ctrl+C stops gracefully: this is the only way to end an
+            // untimed `listnr start`, and it must produce the transcript.
+            FileHandle.standardError.write(Data("\n⌃C, stopping...  press Ctrl+C again to force quit\n".utf8))
             runner.requestStop()
         }
         sigint.resume()
