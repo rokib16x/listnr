@@ -92,7 +92,7 @@ What gets written to disk:
 | What | Where | Notes |
 |---|---|---|
 | Transcripts | `~/Documents/Listnr/listnr_*.md` | **Not encrypted.** Nothing deletes them for you. |
-| Models | WhisperKit's model cache | Reused across sessions. |
+| Models | `~/Documents/huggingface/models/argmaxinc/` | WhisperKit's default cache; reused across sessions, safe to delete to reclaim disk. |
 | Config | `~/Library/Application Support/listnr/config.json` | Read, but currently never written. |
 | `/dump` audio | `~/Documents/Listnr/debug/listnr-*.wav` | Raw session audio, written with owner-only permissions (0600). Delete after debugging. |
 
@@ -132,6 +132,8 @@ Listnr needs two, and macOS attaches both to your **terminal application** rathe
 
 Two things follow from that. Switching from Terminal to iTerm means granting them again, and macOS usually needs the Settings toggle plus a relaunch before it takes effect. `listnr doctor` will tell you which one is missing.
 
+Both permissions are required to start: there is no microphone-only mode today, because a meeting transcript without the other side is not one. If you only want to test your own voice, grant both anyway; Lane B simply stays silent.
+
 The Screen Recording permission is how macOS gates system audio capture through ScreenCaptureKit. Listnr asks for a 2x2 pixel video stream that it never reads, purely because the API insists on one. **No screen content is captured, stored, or transmitted.** You can check that yourself in [`Sources/Listnr/Capture/SystemAudioCapture.swift`](Sources/Listnr/Capture/SystemAudioCapture.swift).
 
 ---
@@ -154,8 +156,25 @@ listnr> /live 30           # 30 seconds, then report
 listnr> /live 300          # 5 minutes, then report
 ```
 
-5. To finish, type `q` or `/stop` and press Enter, or press **Ctrl+C**.
+5. To finish, type `q` or `/stop` and press Enter. (**Ctrl+C** cancels without a transcript.)
 6. You get the transcript on screen, and a Markdown copy in `~/Documents/Listnr/`.
+
+### What the output looks like
+
+A short (fictional) standup, one teammate on the call:
+
+```text
+[00:02] You: Morning. Quick one today, I want to close out the export bug.
+[00:09] Speaker 1: Sounds good. I reproduced it, it only happens when the file name has a colon.
+[00:17] You: That matches what I saw. I'll strip reserved characters and add a test.
+[00:26] Speaker 1: Ship it behind the flag first, the installer folks asked us not to change file names silently.
+[00:38] You: Fair. Flag first, default on next release. Anything else?
+[00:44] Speaker 1: Nothing from me.
+```
+
+Your microphone is always `You`. Remote voices become `Speaker 1...N` after the
+session ends, when diarization runs. The same content is saved as Markdown with
+a timestamped filename.
 
 ### Language
 

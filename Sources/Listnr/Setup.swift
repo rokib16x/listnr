@@ -43,7 +43,8 @@ struct Setup: ParsableCommand {
         print()
         try waitForScreenRecording()
         print()
-        print("✓ permissions look ready. Next: M1 dual capture (`listnr start` will grow).")
+        print("✓ permissions look ready.")
+        print("  Try it: run `listnr`, then `/live 30` and say something.")
         print("  Tip: run `listnr doctor` anytime to re-check.")
     }
 

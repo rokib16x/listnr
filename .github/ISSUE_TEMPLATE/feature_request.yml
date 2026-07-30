@@ -1,0 +1,45 @@
+name: Feature request
+description: Suggest an improvement or new capability.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before writing, skim the "Status / beta" table in the README and the
+        [good first issues](https://github.com/rokib16x/listnr/blob/main/CONTRIBUTING.md#good-first-issues)
+        list; several obvious features are already planned there.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that Listnr makes hard or impossible today?
+      placeholder: |
+        I run 2-hour calls and the memory use makes my 8 GB machine swap.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+      description: What should happen instead? CLI sketches welcome.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Including "I do it manually today by...".
+
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Would you work on this yourself?
+      options:
+        - Yes, with some guidance
+        - Yes, independently
+        - No, just suggesting
+    validations:
+      required: true
