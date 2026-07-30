@@ -23,6 +23,13 @@ final class StdinReader: @unchecked Sendable {
     private var liveHandler: LiveHandler?
     private var reachedEOF = false
     private var started = false
+    /// Where lines come from. Injectable so the buffering and hand-off rules
+    /// can be tested without swapping the process's real stdin.
+    private let source: @Sendable () -> String?
+
+    init(source: @escaping @Sendable () -> String? = { readLine(strippingNewline: true) }) {
+        self.source = source
+    }
 
     func start() {
         lock.lock()
@@ -37,7 +44,7 @@ final class StdinReader: @unchecked Sendable {
     }
 
     private func loop() {
-        while let line = readLine(strippingNewline: true) {
+        while let line = source() {
             lock.lock()
             let handler = liveHandler
             lock.unlock()

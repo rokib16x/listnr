@@ -8,6 +8,30 @@ While the version is `0.x`, the CLI surface may change in any minor release.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Every utterance no longer starts with a duplicated 30 ms of audio.** When
+  the segmenter triggered, the pre-roll ring already contained the triggering
+  frame, and that frame was then appended a second time. The onset stuttered in
+  the audio handed to Whisper, and the buffer was one frame longer than the
+  span its timestamp claimed, so each segment's start was reported 30 ms early.
+  A test now asserts the invariant directly: a segment must be byte-identical
+  to the source audio at the position it says it starts at.
+
+### Added
+
+- Tests for the stop-versus-cancel rule (extracted to `SessionStopState`), the
+  stdin reader's buffering and live hand-off, and `LanguageMode` /
+  `SessionOptions` / `ModelRegistry`. The suite is now 76 tests.
+
+### Changed
+
+- The stop/cancel decision moved out of `LiveSessionRunner` into
+  `SessionStopState` so the rule that broke in `0.1.0-beta` is covered by
+  tests; behaviour is unchanged.
+- `StdinReader` takes an injectable line source, so its buffering rules can be
+  tested without swapping the process's real stdin.
+
 ## [0.1.1-beta] - 2026-07-31
 
 ### Added

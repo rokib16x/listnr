@@ -101,13 +101,15 @@ struct EnergyVAD {
             appendPreroll(frame)
             if speaking {
                 inSpeech = true
-                // Credit the lookback so timestamps and audio include the onset.
-                let lookback = preroll
-                let lookbackFrames = lookback.count
-                speechStartFrame = max(0, absoluteFrame - lookbackFrames)
+                // The ring already ends with this frame, so it *is* the
+                // utterance so far. Appending `frame` again here duplicated the
+                // onset, which both stuttered the audio Whisper saw and made
+                // the buffer longer than the span its timestamp claimed.
+                utterance = preroll
+                // The buffer ends with this frame, so its first sample sits
+                // `utterance.count` back from the end of it.
+                speechStartFrame = max(0, absoluteFrame + frame.count - utterance.count)
                 hangoverLeft = hangoverFrames
-                utterance = lookback
-                utterance.append(contentsOf: frame)
                 voicedSamples = frame.count
                 currentVoicedRun = frame.count
                 longestVoicedRun = frame.count

@@ -35,9 +35,8 @@ final class LiveSessionRunner: @unchecked Sendable {
     }
 
     private let options: SessionOptions
-    private var stopRequested = false
-    private var cancelRequested = false
-    private var captureStarted = false
+    /// Stop-versus-cancel rule; see `SessionStopState` for why it lives there.
+    private let stopState = SessionStopState()
     private let stopLock = NSLock()
     private var runningTask: Task<Void, Never>?
 
@@ -50,39 +49,34 @@ final class LiveSessionRunner: @unchecked Sendable {
     /// nothing to finalize, so stopping there cancels the task to abort the
     /// download instead of letting it run to completion.
     func requestStop() {
-        stopLock.lock()
-        stopRequested = true
-        let task = captureStarted ? nil : runningTask
-        stopLock.unlock()
-        task?.cancel()
+        if stopState.requestStop() {
+            currentTask()?.cancel()
+        }
     }
 
     /// Abort the session: capture stops and the transcript is discarded.
     func requestCancel() {
+        stopState.requestCancel()
+        currentTask()?.cancel()
+    }
+
+    private func currentTask() -> Task<Void, Never>? {
         stopLock.lock()
-        cancelRequested = true
-        let task = runningTask
-        stopLock.unlock()
-        task?.cancel()
+        defer { stopLock.unlock() }
+        return runningTask
     }
 
     private var shouldStop: Bool {
-        stopLock.lock()
-        defer { stopLock.unlock() }
-        return stopRequested || cancelRequested || Task.isCancelled
+        stopState.shouldFinish || Task.isCancelled
     }
 
     /// True only for an abort (Ctrl+C or Task cancel), never for a graceful /stop.
     private var wasCancelled: Bool {
-        stopLock.lock()
-        defer { stopLock.unlock() }
-        return cancelRequested || Task.isCancelled
+        stopState.isCancel || Task.isCancelled
     }
 
     private func markCaptureStarted() {
-        stopLock.lock()
-        captureStarted = true
-        stopLock.unlock()
+        stopState.markCaptureStarted()
     }
 
     /// Pump the main run loop while the async session runs (needed for SCK / AVAudio).

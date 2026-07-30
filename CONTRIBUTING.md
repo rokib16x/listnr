@@ -78,10 +78,13 @@ What is covered today:
 | `TranscriptMergerTests` | Shift, clamping, cross-lane ordering, and the `laneOffsets` skew guard |
 | `LaneTranscriberTests` | The full lane pipeline against a fake transcriber: FIFO ordering, the RMS gate, teardown via `abandon()` |
 | `WAVWriterTests` | Byte-exact header and sample round-trip, including clamping |
+| `SessionStopStateTests` | Stop versus cancel: a `/stop` during capture must never cancel the task, which is the `0.1.0-beta` regression |
+| `StdinReaderTests` | Line ordering, live-handler consumption, and buffering of typed-ahead input |
+| `SessionOptionsTests` | `LanguageMode` parsing and model preference, `resolveModel`, registry integrity |
 
-Good additions: `LanguageMode.parse` / `SessionOptions.resolveModel` edge
-cases, and property-style tests that push audio through `EnergyVAD` at varying
-chunk sizes.
+Good additions: property-style tests that push audio through `EnergyVAD` at
+varying chunk sizes, and a `Config` save/load round-trip through a temp
+directory (see issue #1).
 
 If you are testing the capture or session layer, please introduce a protocol
 seam (a `CaptureSource` that `DualCaptureSession` depends on) and a WAV-backed

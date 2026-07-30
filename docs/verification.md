@@ -44,6 +44,8 @@ call with one consenting participant.
       the right script.
 - [ ] Silence for 60 s mid-call with nobody talking: no hallucinated lines
       ("Thank you", "thanks for watching", etc.).
+- [ ] `/dump` a session, then listen to the start of a few utterances in
+      `listnr-mic.wav`: no stuttered or repeated onset syllable.
 
 ## 4. Resources and long sessions
 

@@ -109,6 +109,45 @@ final class EnergyVADTests: XCTestCase {
         XCTAssertGreaterThan(seg.startSeconds, 0.4)
     }
 
+    /// The invariant that ties audio and timestamps together: a segment must be
+    /// exactly the source audio at the position it claims to start at. This
+    /// catches both duplicated samples and an off-by-a-frame timestamp, and it
+    /// failed before the onset fix, which appended the trigger frame twice.
+    func testSegmentIsAContiguousSliceOfTheSourceAtItsTimestamp() {
+        // A signal where every sample is distinguishable, so a duplicated or
+        // shifted region cannot accidentally compare equal. The amplitude
+        // envelope stays well above the threshold throughout.
+        let total = Int(4 * sampleRate)
+        var source = [Float](repeating: 0, count: total)
+        let voicedRange = Int(1 * sampleRate)..<Int(1.8 * sampleRate)
+        for i in voicedRange {
+            let envelope = 0.08 + 0.04 * Float(i - voicedRange.lowerBound) / Float(voicedRange.count)
+            source[i] = (i % 2 == 0 ? envelope : -envelope)
+        }
+
+        let segs = segments(for: source)
+        XCTAssertEqual(segs.count, 1)
+        guard let seg = segs.first else { return }
+
+        let start = Int((seg.startSeconds * sampleRate).rounded())
+        XCTAssertLessThanOrEqual(start + seg.samples.count, source.count)
+        let expected = Array(source[start..<(start + seg.samples.count)])
+        XCTAssertEqual(seg.samples, expected, "segment audio must match the source at its own timestamp")
+    }
+
+    func testConsecutiveSegmentsDoNotOverlap() {
+        let audio = silence(seconds: 1)
+            + tone(seconds: 0.5, amplitude: 0.1)
+            + silence(seconds: 2)
+            + tone(seconds: 0.5, amplitude: 0.1)
+            + silence(seconds: 1.5)
+        let segs = segments(for: audio)
+        XCTAssertEqual(segs.count, 2)
+        guard segs.count == 2 else { return }
+        let firstEnd = segs[0].startSeconds + Double(segs[0].samples.count) / sampleRate
+        XCTAssertLessThanOrEqual(firstEnd, segs[1].startSeconds + 1e-9, "segments must not overlap in time")
+    }
+
     func testLongUtteranceSplitAtMaxLength() {
         let audio = silence(seconds: 1) + tone(seconds: 30, amplitude: 0.1) + silence(seconds: 1.5)
         let segs = segments(for: audio)
