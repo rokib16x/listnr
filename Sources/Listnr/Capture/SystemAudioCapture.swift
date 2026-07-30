@@ -3,9 +3,9 @@ import CoreMedia
 import Foundation
 import ScreenCaptureKit
 
-/// Lane B — speaker / system audio via ScreenCaptureKit (app-agnostic).
-/// Anything playing through the Mac's output (Discord, Zoom, browser, …) lands here.
-/// Samples are converted to 16 kHz mono Float32 — never mixed with the mic lane.
+/// Lane B, the speaker / system audio, via ScreenCaptureKit (app-agnostic).
+/// Anything playing through the Mac's output (Discord, Zoom, browser, ...) lands here.
+/// Samples are converted to 16 kHz mono Float32 and never mixed with the mic lane.
 final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     enum CaptureError: Error, LocalizedError {
         case noDisplay
@@ -79,7 +79,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         config.excludesCurrentProcessAudio = true
         config.sampleRate = Self.nativeSampleRate
         config.channelCount = 2
-        // Minimal video footprint — we only consume .audio output.
+        // Minimal video footprint; we only consume .audio output.
         config.width = 2
         config.height = 2
         config.minimumFrameInterval = CMTime(value: 1, timescale: 1)
@@ -129,7 +129,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
         guard type == .audio, isRunning else { return }
 
-        // Already on sampleQueue — converter state is single-threaded here.
+        // Already on sampleQueue, so converter state is single-threaded here.
         if firstSampleHostSeconds == nil {
             // SCK presentation timestamps are on the host clock, the same clock
             // AVAudioTime.hostTime uses, so the two lanes are directly comparable.
@@ -158,7 +158,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     /// Uses `AVAudioConverter` rather than hand-rolled interpolation. That
     /// matters: decimating 48 kHz → 16 kHz is a 3:1 ratio, and without a
     /// lowpass everything above 8 kHz folds back into the speech band as
-    /// aliasing distortion — degrading both Whisper's transcription and
+    /// aliasing distortion, degrading both Whisper's transcription and
     /// SpeakerKit's embeddings, on the lane that carries every remote voice.
     /// The converter also handles the stereo → mono downmix, so no channel is
     /// silently discarded.
@@ -195,7 +195,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
         // Point the PCM buffer's AudioBufferList at the sample buffer's data
         // instead of copying. `blockBuffer` owns that memory, so it has to stay
-        // alive for as long as `inBuffer` is read — hence withExtendedLifetime
+        // alive for as long as `inBuffer` is read, hence withExtendedLifetime
         // around the conversion below.
         let audioBufferList = inBuffer.mutableAudioBufferList
         guard audioBufferList.pointee.mNumberBuffers > 0 else { return nil }

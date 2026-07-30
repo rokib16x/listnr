@@ -50,7 +50,7 @@ enum DoctorReport {
         case .notDetermined:
             return Check(
                 name: "microphone",
-                status: .warn("not yet requested — will prompt on first capture"),
+                status: .warn("not yet requested, will prompt on first capture"),
                 remediation: "run `listnr setup` or start a session once; macOS will prompt"
             )
         case .denied, .restricted:

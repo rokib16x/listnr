@@ -4,13 +4,13 @@ import Foundation
 struct Config: Codable, CustomStringConvertible {
     /// Expected remote speakers on the system-audio lane (not counting You).
     var remoteSpeakerHint: Int = 2
-    /// Max remote speakers to cluster toward (3–4 person meetings → you + up to 3).
+    /// Max remote speakers to cluster toward (3-4 person meetings → you + up to 3).
     var maxRemoteSpeakers: Int = 3
     var sampleRate: Double = 16_000
     var dumpWav: Bool = false
 
     var description: String {
-        "remoteSpeakers=\(remoteSpeakerHint)–\(maxRemoteSpeakers) sampleRate=\(Int(sampleRate))"
+        "remoteSpeakers=\(remoteSpeakerHint)-\(maxRemoteSpeakers) sampleRate=\(Int(sampleRate))"
     }
 
     static func load() -> Config {

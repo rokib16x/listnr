@@ -15,7 +15,7 @@ jobs:
   build:
     name: Build & test (${{ matrix.configuration }})
     # Apple Silicon runner. Listnr targets macOS 14+, but the macos-14 runner
-    # image has been retired by GitHub — the deployment-target floor is enforced
+    # image has been retired by GitHub. The deployment-target floor is enforced
     # by `platforms: [.macOS(.v14)]` in Package.swift, not by the runner OS.
     runs-on: macos-15
     strategy:
@@ -53,7 +53,7 @@ jobs:
           if [ -d Tests ]; then
             swift test -c ${{ matrix.configuration }}
           else
-            echo "::warning title=No tests::No Tests/ directory yet — see CONTRIBUTING.md 'Good first issues'."
+            echo "::warning title=No tests::No Tests/ directory yet, see CONTRIBUTING.md 'Good first issues'."
           fi
 
       - name: Smoke-check the CLI

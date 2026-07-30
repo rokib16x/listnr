@@ -32,8 +32,8 @@ struct Setup: ParsableCommand {
         print("============")
         print()
         print("Listnr needs two permissions for meeting capture:")
-        print("  1. Microphone — your voice (Lane A / You)")
-        print("  2. Screen & System Audio Recording — speaker output (Lane B / teammates)")
+        print("  1. Microphone: your voice (Lane A / You)")
+        print("  2. Screen & System Audio Recording: speaker output (Lane B / teammates)")
         print()
         print("These usually attach to your terminal (or the Listnr app), not a cloud service.")
         print("Use a closed headset so teammates do not leak into your mic.")
@@ -54,7 +54,7 @@ struct Setup: ParsableCommand {
             print("✓ microphone already granted")
             return
         case .denied, .restricted:
-            print("✗ microphone is denied — macOS will not re-prompt.")
+            print("✗ microphone is denied. macOS will not re-prompt.")
             print("  opening Settings → Privacy & Security → Microphone...")
             openSettings("Privacy_Microphone")
             print("  enable your terminal / Listnr, then re-run `listnr setup`.")

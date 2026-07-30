@@ -13,7 +13,7 @@ enum TranscriberError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingEngineID: return "model missing WhisperKit id"
-        case .notLoaded: return "transcriber not loaded — call warmUp() first"
+        case .notLoaded: return "transcriber not loaded. call warmUp() first"
         }
     }
 }

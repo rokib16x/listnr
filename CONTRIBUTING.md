@@ -1,15 +1,15 @@
 # Contributing to Listnr
 
-Thanks for your interest. Listnr is early — pre-1.0, one maintainer, and there
-is a lot of low-hanging fruit. Bug reports and small focused pull requests are
+Thanks for your interest. Listnr is early: pre-1.0, one maintainer, and plenty
+of low-hanging fruit. Bug reports and small focused pull requests are
 both very welcome.
 
 By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Requirements
 
-Listnr is macOS- and Apple-Silicon-only, and that is unlikely to change — it
-depends on Core ML / the Apple Neural Engine, `AVAudioEngine`, and
+Listnr is macOS and Apple Silicon only, and that is unlikely to change. It
+depends on Core ML and the Apple Neural Engine, `AVAudioEngine`, and
 ScreenCaptureKit.
 
 | | |
@@ -42,7 +42,7 @@ Then grant permissions once and check them:
 
 `doctor` must show microphone and screen-recording access before Lane B
 (system/speaker audio) will produce anything. Both permissions attach to your
-**terminal application**, not to the `listnr` binary — so if you switch from
+**terminal application**, not to the `listnr` binary, so if you switch from
 Terminal to iTerm you will be prompted again.
 
 Run it:
@@ -52,8 +52,8 @@ Run it:
 .build/debug/listnr start --seconds 20   # one-shot
 ```
 
-For anything performance- or latency-related, always measure a release build —
-debug Swift is far slower and will mislead you:
+For anything performance or latency related, always measure a release build.
+Debug Swift is far slower and will mislead you:
 
 ```bash
 swift build -c release
@@ -86,7 +86,7 @@ seam (a `CaptureSource` that `DualCaptureSession` depends on) and a WAV-backed
 fake, rather than mocking hardware. That makes the whole pipeline testable in CI
 where there is no microphone, no ANE, and no permissions.
 
-## Concurrency — please read this before touching the audio path
+## Concurrency: please read this before touching the audio path
 
 Listnr had **known data races**, and they were the source of most of its real
 bugs. Four strict-concurrency diagnostics remain (see below). Do not add more.
@@ -111,7 +111,7 @@ Three rules specific to this codebase:
 2. **The audio render callback is a realtime thread.** No locks, no allocation,
    no queue hops, no `print`. Copy into a preallocated buffer and hand off.
 3. **Never mix Lane A and Lane B before speech recognition.** This is the core
-   design invariant of the project — mixing destroys speaker identity, which is
+   design invariant of the project. Mixing destroys speaker identity, which is
    the whole reason Listnr exists. Mixing is acceptable only for producing a
    single playback archive file.
 
@@ -125,7 +125,7 @@ Conventions in use:
 - 4-space indentation, no tabs.
 - `// MARK: -` to separate protocol conformances in larger types.
 - Comments explain **why**, not what. The existing comments in `EnergyVAD` and
-  `DownloadProgressPrinter` are the standard to aim for — if you work out a
+  `DownloadProgressPrinter` are the standard to aim for. If you work out a
   non-obvious reason for a threshold or an ordering, write it down.
 - User-facing progress, levels, and diagnostics go to **stderr**. Only the final
   transcript goes to **stdout**, so it stays pipeable.
@@ -139,8 +139,8 @@ will sit for a long time. Small and focused gets merged.
 
 Before you start:
 
-- **Open an issue first** for anything non-trivial — a new dependency, a change
-  to the CLI surface, a new capture backend, or a change to the lane
+- **Open an issue first** for anything non-trivial, such as a new dependency, a
+  change to the CLI surface, a new capture backend, or a change to the lane
   architecture. This saves you from building something that then gets declined.
 - **Typo fixes, docs, and small bug fixes need no prior discussion.** Just send
   them.
@@ -152,7 +152,7 @@ Then:
 3. Confirm `swift build` is clean and no new concurrency warnings appear.
 4. Add an entry under `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md).
 5. Open the PR. Describe **what changed, why, and how you verified it.** For
-   anything touching audio or transcription, say what you actually tested with —
+   anything touching audio or transcription, say what you actually tested with:
    how many speakers, which language, which model, how long a session.
 
 Commit messages use [Conventional Commits](https://www.conventionalcommits.org/):
@@ -175,11 +175,11 @@ If you want somewhere to start, in rough order of value:
 1. **A test target** covering any of the pure functions listed above.
 2. **`isatty(2)` guards** on progress output and the level meter, so piped and
    CI output is readable.
-3. **`--version`** — currently `listnr --version` prints a confusing
+3. **`--version`**. Right now `listnr --version` prints a confusing
    `Usage: listnr shell`. Needs `version:` in `CommandConfiguration`.
 4. **`--json` and `--output <path>`** for machine-readable transcripts.
 5. **Adaptive VAD thresholds.** They are fixed absolute RMS values today
-   (0.014, 0.018, 0.022, 0.025 …, scattered across four files). Microphone gain
+   (0.014, 0.018, 0.022, 0.025 and so on, scattered across four files). Mic gain
    varies by more than 20 dB across hardware. Consolidate them into one struct
    and derive from a rolling noise floor.
 6. **Wire up `Config.save()`.** It exists and is never called, so every `/lang`,
@@ -195,12 +195,12 @@ If you want somewhere to start, in rough order of value:
 
 Use the [bug report template](.github/ISSUE_TEMPLATE/bug_report.yml). For audio
 and transcription problems, `listnr doctor` output plus your macOS version, chip,
-and model choice are genuinely necessary — without them a report usually cannot
+and model choice are genuinely necessary. Without them a report usually cannot
 be acted on.
 
 **Never attach real meeting audio or a real transcript.** Reproduce with your own
 voice or synthetic audio. If a bug only shows up with particular audio, describe
-the characteristics — number of speakers, language, overlap, background noise —
+the characteristics (number of speakers, language, overlap, background noise)
 rather than sending a recording of other people.
 
 ## Security

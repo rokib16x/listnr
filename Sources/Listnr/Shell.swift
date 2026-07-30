@@ -34,11 +34,11 @@ private final class ShellState: @unchecked Sendable {
     }
 }
 
-/// Interactive shell: `listnr` → `/live`, `/lang`, …
+/// Interactive shell: `listnr` → `/live`, `/lang`, ...
 struct Shell: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "shell",
-        abstract: "Interactive Listnr prompt (/live, /lang, /stop, …). Default when you run `listnr`."
+        abstract: "Interactive Listnr prompt (/live, /lang, /stop, ...). Default when you run `listnr`."
     )
 
     @Flag(name: .long, help: "Skip permission checks at startup.")
@@ -73,7 +73,7 @@ struct Shell: ParsableCommand {
 
         // A dedicated queue, not `.main`. The main thread spends its time blocked
         // in the prompt or pumping a session's run loop, and a handler queued on
-        // `.main` does not run while it is blocked — so Ctrl+C at an idle prompt
+        // `.main` does not run while it is blocked, so Ctrl+C at an idle prompt
         // did nothing, then fired later and cancelled the *next* /live session.
         let signalQueue = DispatchQueue(label: "listnr.signal")
         let sigint = DispatchSource.makeSignalSource(signal: SIGINT, queue: signalQueue)
@@ -83,10 +83,10 @@ struct Shell: ParsableCommand {
                 Darwin.exit(0)
             }
             if state.bumpInterrupt() >= 2 {
-                FileHandle.standardError.write(Data("\n⌃C again — force quit\n".utf8))
+                FileHandle.standardError.write(Data("\n⌃C again: force quit\n".utf8))
                 Darwin.exit(130)
             }
-            FileHandle.standardError.write(Data("\n⌃C — cancelling (download/live)…  press Ctrl+C again to force quit\n".utf8))
+            FileHandle.standardError.write(Data("\n⌃C, cancelling (download/live)...  press Ctrl+C again to force quit\n".utf8))
             runner.requestStop()
         }
         sigint.resume()
@@ -162,7 +162,7 @@ struct Shell: ParsableCommand {
 
             case "/live", "live":
                 if state.runner != nil {
-                    print("already live — Ctrl+C or wait")
+                    print("already live. Ctrl+C or wait")
                     continue
                 }
 
@@ -190,7 +190,7 @@ struct Shell: ParsableCommand {
                 do {
                     _ = try runner.runBlocking()
                 } catch LiveSessionError.cancelled {
-                    FileHandle.standardError.write(Data("returned to prompt — partial download kept; resume with /live\n".utf8))
+                    FileHandle.standardError.write(Data("returned to prompt. partial download kept; resume with /live\n".utf8))
                 } catch {
                     FileHandle.standardError.write(Data("live failed: \(error.localizedDescription)\n".utf8))
                 }
@@ -202,15 +202,15 @@ struct Shell: ParsableCommand {
             case "/stop", "stop":
                 if let runner = state.runner {
                     runner.requestStop()
-                    print("stopping…")
+                    print("stopping...")
                 } else {
-                    print("not live — nothing to stop")
+                    print("not live, nothing to stop")
                 }
 
             case "q", "/q", "quit", "exit", "/quit", "/exit":
                 if let runner = state.runner {
                     runner.requestStop()
-                    print("stopping…")
+                    print("stopping...")
                 } else {
                     print("bye")
                     return
@@ -236,9 +236,9 @@ struct Shell: ParsableCommand {
               /live 30           listen for 30 seconds then report
               /live 300          listen for 300 seconds then report
               /stop | q          stop a live session (type while live + Enter)
-              /lang en|auto|bn|hi…  language — use bn/hi explicitly for Bangla/Hindi
+              /lang en|auto|bn|hi   language. use bn/hi explicitly for Bangla/Hindi
                                     (auto is slower and often mis-detects short speech)
-              /speakers N        remote speaker hint (1–6)
+              /speakers N        remote speaker hint (1-6)
               /model <id>        whisper-base.en | whisper-small.en | whisper-large-v3-turbo
               /dump              toggle WAV dump to /tmp
               /diarize           toggle SpeakerKit on Lane B

@@ -18,9 +18,9 @@ enum AudioMath {
 
 /// Converts mach absolute times to seconds on the host clock.
 ///
-/// Both capture lanes report the timestamp of their first sample on this clock —
-/// `AVAudioTime.hostTime` for the mic and the presentation timestamp for
-/// ScreenCaptureKit — which is what lets their transcripts share one timeline.
+/// Both capture lanes report the timestamp of their first sample on this clock
+/// (`AVAudioTime.hostTime` for the mic, the presentation timestamp for
+/// ScreenCaptureKit), which is what lets their transcripts share one timeline.
 enum HostClock {
     private static let scale: Double = {
         var info = mach_timebase_info_data_t()

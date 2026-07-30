@@ -1,7 +1,7 @@
 import Foundation
 
 /// Runs Lane A (mic) and Lane B (system/speakers) in parallel.
-/// Lanes are never mixed — that is intentional for multi-speaker STT later.
+/// Lanes are never mixed. That is intentional for multi-speaker STT later.
 final class DualCaptureSession {
     struct Result {
         let mic: [Float]
@@ -9,7 +9,7 @@ final class DualCaptureSession {
         let durationSeconds: Double
         /// Host-clock time of each lane's first sample, when known. The lanes
         /// start milliseconds apart, so their sample-count timestamps are not
-        /// directly comparable — these anchor both onto one session timeline.
+        /// directly comparable; these anchor both onto one session timeline.
         let micFirstSampleTime: Double?
         let systemFirstSampleTime: Double?
 
@@ -24,7 +24,7 @@ final class DualCaptureSession {
             // shifting by a bogus amount is worse than not shifting at all.
             guard skew <= 5 else {
                 FileHandle.standardError.write(Data(
-                    String(format: "! lane clock skew %.1fs looks wrong — merging without an offset\n", skew).utf8
+                    String(format: "! lane clock skew %.1fs looks wrong, merging without an offset\n", skew).utf8
                 ))
                 return (0, 0)
             }
@@ -116,7 +116,7 @@ final class DualCaptureSession {
     }
 
     func stop() async -> Result {
-        // Read the anchors before stopping — `stop()` clears per-run state.
+        // Read the anchors before stopping, since `stop()` clears per-run state.
         let micAnchor = mic.firstSampleTime
         let systemAnchor = system.firstSampleTime
         let micSamples = mic.stop()

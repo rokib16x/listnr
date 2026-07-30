@@ -4,10 +4,10 @@ import Foundation
 ///
 /// Hugging Face Hub nests per-file Progress under a parent. **`completedUnitCount`
 /// only jumps when a whole file finishes**. **`fractionCompleted` updates during
-/// the current file** — always prefer that for % / MB / ETA.
+/// the current file**, so always prefer that for % / MB / ETA.
 ///
 /// Near the end, speed often drops (large LFS weight file / disk flush). ETA can
-/// temporarily rise — that means the link slowed, not that progress went backwards.
+/// temporarily rise. That means the link slowed, not that progress went backwards.
 final class DownloadProgressPrinter: @unchecked Sendable {
     private let label: String
     private let expectedMB: Int?
@@ -25,7 +25,7 @@ final class DownloadProgressPrinter: @unchecked Sendable {
         if let expectedMB {
             msg += " (~\(expectedMB) MB total)"
         }
-        msg += "…\n"
+        msg += "...\n"
         FileHandle.standardError.write(Data(msg.utf8))
     }
 
@@ -62,9 +62,9 @@ final class DownloadProgressPrinter: @unchecked Sendable {
         if looksLikeFileCount {
             let remaining = max(0, totalFiles - completedFiles)
             if remaining <= 2, fraction < 0.999 {
-                filesText = "  files \(completedFiles)/\(totalFiles) (last large file…)"
+                filesText = "  files \(completedFiles)/\(totalFiles) (last large file...)"
             } else if fraction < 0.999, completedFiles < totalFiles {
-                filesText = "  files \(completedFiles)/\(totalFiles) (fetching…)"
+                filesText = "  files \(completedFiles)/\(totalFiles) (fetching...)"
             } else {
                 filesText = "  files \(completedFiles)/\(totalFiles)"
             }
@@ -80,7 +80,7 @@ final class DownloadProgressPrinter: @unchecked Sendable {
             }
         }
 
-        var etaText = "…"
+        var etaText = "..."
         let elapsed = now.timeIntervalSince(startedAt)
         var rawRemaining: TimeInterval?
         if let speedBps, speedBps > 0, let expectedMB, expectedMB > 0, fraction < 0.999 {

@@ -81,10 +81,10 @@ struct Start: ParsableCommand {
         let sigint = DispatchSource.makeSignalSource(signal: SIGINT, queue: signalQueue)
         sigint.setEventHandler {
             if interrupts.bump() >= 2 {
-                FileHandle.standardError.write(Data("\n⌃C again — force quit\n".utf8))
+                FileHandle.standardError.write(Data("\n⌃C again: force quit\n".utf8))
                 Darwin.exit(130)
             }
-            FileHandle.standardError.write(Data("\n⌃C — cancelling…  press Ctrl+C again to force quit\n".utf8))
+            FileHandle.standardError.write(Data("\n⌃C, cancelling...  press Ctrl+C again to force quit\n".utf8))
             runner.requestStop()
         }
         sigint.resume()

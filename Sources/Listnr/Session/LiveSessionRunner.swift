@@ -101,7 +101,7 @@ final class LiveSessionRunner {
             try await t.warmUp()
             try Task.checkCancellation()
             if shouldStop { throw CancellationError() }
-            // Stricter thresholds on system lane — silence there was hallucinating “Thank you”.
+            // Stricter thresholds on the system lane; silence there was hallucinating “Thank you”.
             youLane = LaneTranscriber(speakerLabel: "You", transcriber: t, speechThreshold: 0.014, minSegmentRMS: 0.018)
             othersLane = LaneTranscriber(speakerLabel: "Others", transcriber: t, speechThreshold: 0.022, minSegmentRMS: 0.025)
         }
@@ -153,7 +153,7 @@ final class LiveSessionRunner {
             FileHandle.standardError.write(Data(line.utf8))
             if meterTicks == 6, !micSeen {
                 FileHandle.standardError.write(Data(
-                    "\n! mic still silent — check System Settings → Sound → Input, and speak louder\n".utf8
+                    "\n! mic still silent. Check System Settings → Sound → Input, and speak louder\n".utf8
                 ))
             }
         }
@@ -183,7 +183,7 @@ final class LiveSessionRunner {
 
         let result = await session.stop()
 
-        // Cancelled during download/warmup before useful audio — bail without report.
+        // Cancelled during download/warmup before useful audio, so bail without a report.
         if Task.isCancelled, result.durationSeconds < 0.5, result.mic.count < 8_000 {
             throw CancellationError()
         }
@@ -250,7 +250,7 @@ final class LiveSessionRunner {
 
         var remote: [TranscriptLine] = []
         if options.diarize, AudioMath.rms(result.system) >= 0.008 {
-            FileHandle.standardError.write(Data("\ndiarizing Lane B (remote speakers)…\n".utf8))
+            FileHandle.standardError.write(Data("\ndiarizing Lane B (remote speakers)...\n".utf8))
             let diarizer = RemoteDiarizer(speakerHint: options.remoteSpeakers)
             do {
                 try await diarizer.warmUp()
@@ -268,7 +268,7 @@ final class LiveSessionRunner {
                     )
                 }
             } catch {
-                FileHandle.standardError.write(Data("diarization failed: \(error.localizedDescription) — falling back to Others\n".utf8))
+                FileHandle.standardError.write(Data("diarization failed: \(error.localizedDescription), falling back to Others\n".utf8))
                 if let text = try? await transcriber.transcribe(result.system), !text.isEmpty {
                     remote = [TranscriptLine(speaker: "Others", startSeconds: 0, text: text)]
                 }
@@ -291,7 +291,7 @@ enum LiveSessionError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noResult: return "session returned no result"
-        case .alreadyLive: return "already listening — /stop first"
+        case .alreadyLive: return "already listening, /stop first"
         case .cancelled: return "cancelled"
         }
     }

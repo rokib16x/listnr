@@ -27,7 +27,7 @@ actor WhisperKitTranscriber: Transcriber {
             throw TranscriberError.missingEngineID
         }
 
-        FileHandle.standardError.write(Data("preparing \(model.id)…\n".utf8))
+        FileHandle.standardError.write(Data("preparing \(model.id)...\n".utf8))
 
         let printer = DownloadProgressPrinter(label: model.id, expectedMB: model.sizeMB)
         let folder: URL
@@ -48,7 +48,7 @@ actor WhisperKitTranscriber: Transcriber {
         try Task.checkCancellation()
         printer.finish(note: "\(model.id) on disk")
 
-        FileHandle.standardError.write(Data("loading \(model.id) into memory (ANE)…\n".utf8))
+        FileHandle.standardError.write(Data("loading \(model.id) into memory (ANE)...\n".utf8))
         let config = WhisperKitConfig(
             model: whisperKitID,
             modelFolder: folder.path,
@@ -67,7 +67,7 @@ actor WhisperKitTranscriber: Transcriber {
     ///
     /// This deliberately does **not** apply its own RMS floor. It used to reject
     /// anything below 0.018, which silently overrode callers that had already
-    /// made a considered decision — diarized spans admitted at 0.005 were
+    /// made a considered decision: diarized spans admitted at 0.005 were
     /// dropped here and returned as empty text, so quiet remote speakers simply
     /// vanished from the transcript with nothing logged.
     func transcribe(_ audio: [Float]) async throws -> String {

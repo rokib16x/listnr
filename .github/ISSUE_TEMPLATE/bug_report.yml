@@ -123,7 +123,7 @@ body:
         ✓ apple silicon: ok
         ✓ microphone: ok
         ✗ screen recording (system audio): not granted
-            → System Settings → Privacy & Security → Screen & System Audio Recording …
+            → System Settings → Privacy & Security → Screen & System Audio Recording → enable for your terminal / Listnr
     validations:
       required: true
 
@@ -133,8 +133,8 @@ body:
       label: Which lane is affected?
       description: Lane A is your microphone ("You"). Lane B is speaker / system audio (remote people).
       options:
-        - Lane A — my own voice / "You"
-        - Lane B — remote speakers / system audio
+        - Lane A, my own voice ("You")
+        - Lane B, remote speakers / system audio
         - Both lanes
         - Neither / not audio-related (CLI, export, build, docs)
     validations:
@@ -160,7 +160,7 @@ body:
     id: logs
     attributes:
       label: Terminal output
-      description: Relevant stderr output — level meters, transcription errors, diarization messages, crash traces. Redact anything sensitive.
+      description: Relevant stderr output, such as level meters, transcription errors, diarization messages, or crash traces. Redact anything sensitive.
       render: text
 
   - type: textarea

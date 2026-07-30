@@ -34,7 +34,7 @@ Please include:
 - Any suggested fix, if you have one.
 
 **Do not include real meeting audio or real transcripts** in a report. Reproduce
-the problem with synthetic audio or your own voice only — sending a recording of
+the problem with synthetic audio or your own voice only. Sending a recording of
 other people to report a bug creates a second privacy problem.
 
 ### What to expect
@@ -61,7 +61,7 @@ In scope:
 
 Out of scope:
 
-- Vulnerabilities in dependencies — report those to
+- Vulnerabilities in dependencies. Report those to
   [WhisperKit](https://github.com/argmaxinc/WhisperKit) or the relevant project
   directly. Tell us too, so we can bump the pin.
 - Transcription inaccuracy, hallucinated text, or wrong speaker labels. Those
@@ -76,7 +76,7 @@ These are documented, intended behaviours, not vulnerabilities:
 
 - **Transcripts are written unencrypted** to `~/Documents/Listnr/`. They are
   protected by your user account's file permissions and nothing more. There is
-  no automatic retention limit — delete them yourself.
+  no automatic retention limit, so delete them yourself.
 - **`/dump` writes raw session audio to `/tmp`** at fixed paths
   (`/tmp/listnr-mic.wav`, `/tmp/listnr-sys.wav`). `/tmp` is world-readable on
   macOS, so on a shared Mac other local users can read those files. This is a

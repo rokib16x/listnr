@@ -3,7 +3,7 @@ import Foundation
 /// Energy-based speech segmenter.
 ///
 /// Keeps a short **pre-roll** ring so the first syllable after a pause is not
-/// clipped (VAD only fires once energy crosses the threshold — by then the
+/// clipped (VAD only fires once energy crosses the threshold, and by then the
 /// onset consonant is often already gone).
 ///
 /// A `struct` on purpose: the segmenter is owned by exactly one consumer task
@@ -34,7 +34,7 @@ struct EnergyVAD {
     /// Frames that were actually above threshold, as opposed to pre-roll and
     /// hangover padding. See `minVoicedSeconds`.
     private var voicedSamples = 0
-    /// Longest *contiguous* voiced stretch — what separates a syllable from a click.
+    /// Longest *contiguous* voiced stretch, which is what separates a syllable from a click.
     private var longestVoicedRun = 0
     private var currentVoicedRun = 0
     private var carry: [Float] = []
@@ -85,7 +85,7 @@ struct EnergyVAD {
         }
         resetUtteranceState()
         carry.removeAll(keepingCapacity: true)
-        // Keep preroll across flush within a session? Clear — flush = end of stream.
+        // Keep preroll across flush within a session? Clear it: flush = end of stream.
         preroll.removeAll(keepingCapacity: true)
         return out
     }
@@ -147,7 +147,7 @@ struct EnergyVAD {
 
         // Three floors, each rejecting something the others cannot.
         //
-        // `minSpeechSeconds` bounds the *buffer* — Whisper needs some context.
+        // `minSpeechSeconds` bounds the *buffer*; Whisper needs some context.
         //
         // `minVoicedSeconds` bounds how much of that buffer was above threshold.
         // Without it the pre-roll defeats the buffer floor entirely: one frame

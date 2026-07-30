@@ -13,7 +13,7 @@ actor RemoteDiarizer {
 
     func warmUp() async throws {
         if kit != nil { return }
-        FileHandle.standardError.write(Data("preparing SpeakerKit (diarization)…\n".utf8))
+        FileHandle.standardError.write(Data("preparing SpeakerKit (diarization)...\n".utf8))
         let config = PyannoteConfig(download: false, load: false, verbose: false)
         let speakerKit = try await SpeakerKit(config)
 

@@ -1,7 +1,7 @@
 import AVFoundation
 import Foundation
 
-/// Lane A — microphone. Captures 16 kHz mono Float32 while running.
+/// Lane A, the microphone. Captures 16 kHz mono Float32 while running.
 final class MicCapture {
     enum CaptureError: Error, LocalizedError {
         case engineStartFailed(Error)
@@ -12,7 +12,7 @@ final class MicCapture {
             switch self {
             case .engineStartFailed(let e): return "mic engine start failed: \(e.localizedDescription)"
             case .converterCreationFailed: return "mic converter creation failed"
-            case .invalidInputFormat: return "mic input format invalid (0 channels / rate) — check System Settings → Sound → Input"
+            case .invalidInputFormat: return "mic input format invalid (0 channels / rate). Check System Settings → Sound → Input"
             }
         }
     }
@@ -135,9 +135,9 @@ final class MicCapture {
 
         lock.lock()
         if firstSampleHostSeconds == nil, when.isHostTimeValid {
-            // Timestamp of the *start* of this buffer, on the host clock — the
-            // same clock ScreenCaptureKit stamps Lane B with, so the two lanes
-            // can share a timeline.
+            // Timestamp of the *start* of this buffer, on the host clock. That
+            // is the same clock ScreenCaptureKit stamps Lane B with, so the two
+            // lanes can share a timeline.
             firstSampleHostSeconds = HostClock.seconds(fromHostTime: when.hostTime)
         }
         samples.append(contentsOf: chunk)

@@ -45,12 +45,12 @@ private final class DropCounter: @unchecked Sendable {
 }
 
 /// Per-lane pipeline: captured audio → VAD → Whisper → transcript lines.
-/// Lanes stay separate (You vs Others) — see the "never mix before ASR" rule.
+/// Lanes stay separate (You vs Others); see the "never mix before ASR" rule.
 ///
 /// Two properties this type exists to guarantee:
 ///
 /// 1. **Order.** Audio is segmented in capture order. Spawning a task per
-///    buffer does *not* give that — unstructured tasks reach an actor in
+///    buffer does *not* give that: unstructured tasks reach an actor in
 ///    arbitrary order, which shuffles the VAD's input and corrupts utterances.
 ///    A single `for await` loop per stage is what makes it FIFO.
 /// 2. **No head-of-line blocking.** Whisper takes hundreds of milliseconds to
@@ -91,7 +91,7 @@ final class LaneTranscriber {
 
         let segmentDrops = self.segmentDrops
         let vad = Task.detached(priority: .userInitiated) {
-            // Owned solely by this task — that is why EnergyVAD is a struct.
+            // Owned solely by this task, which is why EnergyVAD is a struct.
             var segmenter = EnergyVAD(
                 speechThreshold: speechThreshold,
                 minSpeechSeconds: 0.45,
@@ -162,7 +162,7 @@ final class LaneTranscriber {
         if audioLost > 0 { note += " \(audioLost) audio buffer(s)" }
         if audioLost > 0 && segmentsLost > 0 { note += " and" }
         if segmentsLost > 0 { note += " \(segmentsLost) speech segment(s)" }
-        note += " — transcription could not keep up. Try a smaller model.\n"
+        note += ", transcription could not keep up. Try a smaller model.\n"
         FileHandle.standardError.write(Data(note.utf8))
     }
 }
@@ -185,11 +185,11 @@ enum TranscriptMerger {
     }
 
     static func printAll(_ lines: [TranscriptLine]) {
-        FileHandle.standardError.write(Data("\n—— transcript ——\n".utf8))
+        FileHandle.standardError.write(Data("\n-- transcript --\n".utf8))
         for line in lines {
             let stamp = String(format: "%02d:%02d", Int(line.startSeconds) / 60, Int(line.startSeconds) % 60)
             print("[\(stamp)] \(line.speaker): \(line.text)")
         }
-        FileHandle.standardError.write(Data("———————\n".utf8))
+        FileHandle.standardError.write(Data("--------\n".utf8))
     }
 }

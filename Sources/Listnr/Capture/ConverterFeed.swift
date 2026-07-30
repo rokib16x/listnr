@@ -9,7 +9,7 @@ import Foundation
 ///
 /// `@unchecked Sendable` is sound in this specific use: `AVAudioConverter.convert`
 /// invokes the input block synchronously, on the calling thread, before it
-/// returns — so the box and the buffer it holds are never touched concurrently.
+/// returns, so the box and the buffer it holds are never touched concurrently.
 /// Do not reuse an instance across conversions or across threads.
 final class ConverterFeed: @unchecked Sendable {
     private let buffer: AVAudioPCMBuffer
