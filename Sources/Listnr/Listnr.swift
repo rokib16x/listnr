@@ -1,11 +1,15 @@
 import ArgumentParser
 import Foundation
 
+/// Bumped as part of cutting a release; keep in step with CHANGELOG.md.
+let listnrVersion = "0.1.1-beta"
+
 @main
 struct Listnr: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "listnr",
         abstract: "Local meeting listener. Mic + speakers → multi-speaker transcript on Apple Silicon.",
+        version: listnrVersion,
         subcommands: [Shell.self, Start.self, Doctor.self, Setup.self, Models.self],
         defaultSubcommand: Shell.self
     )

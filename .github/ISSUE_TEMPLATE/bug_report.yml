@@ -86,8 +86,8 @@ body:
     id: version
     attributes:
       label: Listnr version or commit
-      description: A release tag, or `git rev-parse --short HEAD` if you built from source.
-      placeholder: "v0.1.0-beta, or 4f2a1c9"
+      description: What `listnr --version` prints, or `git rev-parse --short HEAD` if you built from source.
+      placeholder: "0.1.1-beta, or 4f2a1c9"
     validations:
       required: true
 

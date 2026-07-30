@@ -8,8 +8,11 @@ While the version is `0.x`, the CLI surface may change in any minor release.
 
 ## [Unreleased]
 
+## [0.1.1-beta] - 2026-07-31
+
 ### Added
 
+- `listnr --version`.
 - A test target (`Tests/ListnrTests`, 45 tests) covering the energy VAD's
   transient rejection and floors, the transcript text rules (including CJK,
   Bangla, Hindi and Russian short replies), the per-segment confidence gate,
@@ -169,5 +172,6 @@ current list. The significant ones in this release:
 - Settings changed in the shell do not persist across runs.
 - No automated test suite yet.
 
-[Unreleased]: https://github.com/rokib16x/listnr/compare/v0.1.0-beta...HEAD
+[Unreleased]: https://github.com/rokib16x/listnr/compare/v0.1.1-beta...HEAD
+[0.1.1-beta]: https://github.com/rokib16x/listnr/compare/v0.1.0-beta...v0.1.1-beta
 [0.1.0-beta]: https://github.com/rokib16x/listnr/releases/tag/v0.1.0-beta

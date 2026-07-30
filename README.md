@@ -43,7 +43,7 @@ If any of that sounds like your problem too, it should work for you. If you make
 
 ## Status: beta
 
-Listnr is at **`0.1.0-beta`**. The core pipeline works and produces transcripts I rely on, but this is early software with one maintainer, and the CLI may change in any `0.x` release.
+Listnr is at **`0.1.1-beta`**. The core pipeline works and produces transcripts I rely on, but this is early software with one maintainer, and the CLI may change in any `0.x` release.
 
 Please read these before filing an issue, they are all known:
 
