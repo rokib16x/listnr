@@ -8,6 +8,14 @@ While the version is `0.x`, the CLI surface may change in any minor release.
 
 ## [Unreleased]
 
+### Added
+
+- A test target (`Tests/ListnrTests`, 45 tests) covering the energy VAD's
+  transient rejection and floors, the transcript text rules (including CJK,
+  Bangla, Hindi and Russian short replies), the per-segment confidence gate,
+  the merger and lane-offset logic, the WAV writer, and the full lane
+  pipeline driven by a fake transcriber. CI runs it on every push.
+
 ### Fixed
 
 - **`/stop` and `q` now finish the session and produce the transcript.** The

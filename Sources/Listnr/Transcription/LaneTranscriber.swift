@@ -69,7 +69,7 @@ final class LaneTranscriber {
 
     init(
         speakerLabel: String,
-        transcriber: WhisperKitTranscriber,
+        transcriber: any Transcriber,
         speechThreshold: Float = 0.015,
         minSegmentRMS: Float = 0.020
     ) {

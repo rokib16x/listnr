@@ -53,7 +53,7 @@ Please read these before filing an issue, they are all known:
 | **Memory grows with session length** | Whole-session audio is kept in RAM, roughly **460 MB per hour** across both lanes. Long sessions are memory-hungry. Spilling to disk is planned. |
 | **Voice detection thresholds are fixed** | Speech detection uses absolute RMS values. A very quiet or very hot microphone may need the numbers changed in code. |
 | **Settings do not persist** | `/lang`, `/model`, `/speakers`, and `/dump` all reset when you quit. |
-| **No test suite yet** | See [CONTRIBUTING.md](CONTRIBUTING.md). This is the most useful place to help. |
+| **The capture layer has no automated tests** | The VAD, text filters, confidence gate, merger, and lane pipeline are unit-tested in CI. Everything that touches real hardware (mic, ScreenCaptureKit, models) is verified manually. |
 | **No GUI** | CLI only for now. |
 
 Found something that is not on this list? [Open an issue](https://github.com/rokib16x/listnr/issues/new/choose).

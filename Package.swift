@@ -21,5 +21,10 @@ let package = Package(
             ],
             path: "Sources/Listnr"
         ),
+        .testTarget(
+            name: "ListnrTests",
+            dependencies: ["listnr"],
+            path: "Tests/ListnrTests"
+        ),
     ]
 )

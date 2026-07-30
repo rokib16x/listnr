@@ -224,7 +224,8 @@ struct Shell: ParsableCommand {
     }
 
     /// While live, `q` or `/stop` + Enter finishes the session.
-    private static func isStopCommand(_ line: String) -> Bool {
+    /// Internal (not private) so the test target can exercise it.
+    static func isStopCommand(_ line: String) -> Bool {
         let t = line.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return t == "q" || t == "/q" || t == "/stop" || t == "stop"
     }

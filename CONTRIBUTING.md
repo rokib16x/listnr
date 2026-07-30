@@ -61,25 +61,27 @@ swift build -c release
 
 ## Tests
 
-There is **no test suite yet**. Adding one is one of the most valuable
-contributions available right now, and it does not require any audio hardware.
-
-The pure, easily testable pieces are:
-
-| Component | What to assert |
-|---|---|
-| `EnergyVAD` | Onset retention across a pause; transient rejection (clicks vs short words); segment boundaries; `maxSpeechSeconds` splitting; stability across buffer sizes |
-| `WAVWriter` | Byte-exact header; round-trip through `AVAudioFile` |
-| `TranscriptText.clean` / `isNonSpeech` | Table-driven cases: CJK and Bangla replies, decimals, parenthesised acronyms, `[MUSIC]` markers |
-| `WhisperKitTranscriber.Confidence` | Accept/reject at each threshold boundary |
-| `TranscriptMerger.merge` | Ordering, and stability across equal timestamps |
-| `LanguageMode.parse`, `SessionOptions.resolveModel` | Valid, invalid, and conflicting inputs |
-
-Once a `Tests/ListnrTests/` target exists, CI runs it automatically:
+`Tests/ListnrTests` covers the pure logic with no audio hardware required, and
+CI runs it on every push:
 
 ```bash
 swift test
 ```
+
+What is covered today:
+
+| Suite | What it pins down |
+|---|---|
+| `EnergyVADTests` | Transient rejection (clicks and blips vs short words), the voiced-duration and contiguous-run floors, pre-roll onset credit, `maxSpeechSeconds` splitting, flush of a trailing utterance |
+| `TranscriptTextTests` | Table-driven cases: CJK / Bangla / Hindi / Russian short replies survive, decimals survive, annotations and caption artifacts are removed |
+| `ConfidenceTests` | AND semantics of the no-speech and logprob signals; compression ratio as an independent reject |
+| `TranscriptMergerTests` | Shift, clamping, cross-lane ordering, and the `laneOffsets` skew guard |
+| `LaneTranscriberTests` | The full lane pipeline against a fake transcriber: FIFO ordering, the RMS gate, teardown via `abandon()` |
+| `WAVWriterTests` | Byte-exact header and sample round-trip, including clamping |
+
+Good additions: `LanguageMode.parse` / `SessionOptions.resolveModel` edge
+cases, and property-style tests that push audio through `EnergyVAD` at varying
+chunk sizes.
 
 If you are testing the capture or session layer, please introduce a protocol
 seam (a `CaptureSource` that `DualCaptureSession` depends on) and a WAV-backed
@@ -171,22 +173,21 @@ maintainer's.
 
 If you want somewhere to start, in rough order of value:
 
-1. **A test target** covering any of the pure functions listed above.
+1. **More tests** for the pure functions listed above, especially
+   `LanguageMode` / `SessionOptions` and varying-chunk-size VAD runs.
 2. **`isatty(2)` guards** on progress output and the level meter, so piped and
    CI output is readable.
-3. **`--version`**. Right now `listnr --version` prints a confusing
-   `Usage: listnr shell`. Needs `version:` in `CommandConfiguration`.
-4. **`--json` and `--output <path>`** for machine-readable transcripts.
-5. **Adaptive VAD thresholds.** They are fixed absolute RMS values today
+3. **`--json` and `--output <path>`** for machine-readable transcripts.
+4. **Adaptive VAD thresholds.** They are fixed absolute RMS values today
    (0.014, 0.018, 0.022, 0.025 and so on, scattered across four files). Mic gain
    varies by more than 20 dB across hardware. Consolidate them into one struct
    and derive from a rolling noise floor.
-6. **Wire up `Config.save()`.** It exists and is never called, so every `/lang`,
+5. **Wire up `Config.save()`.** It exists and is never called, so every `/lang`,
    `/model`, and `/speakers` change is lost on exit.
-7. **Spill session audio to disk.** Both lanes are held in RAM for the whole
+6. **Spill session audio to disk.** Both lanes are held in RAM for the whole
    session (~460 MB/hour combined), which is what stops "hours OK" from being
    true. Needs chunked diarization too.
-8. **Retire `MeetingSession.shared`.** The singleton makes concurrent sessions
+7. **Retire `MeetingSession.shared`.** The singleton makes concurrent sessions
    impossible and export untestable, and it stamps the export with the meeting's
    *end* time.
 

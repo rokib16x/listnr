@@ -79,7 +79,7 @@ enum DiarizedTranscriber {
         audio: [Float],
         sampleRate: Double = 16_000,
         spans: [DiarizedSpan],
-        transcriber: WhisperKitTranscriber,
+        transcriber: any Transcriber,
         padBeforeSeconds: Double = 0.35,
         padAfterSeconds: Double = 0.20,
         minSpanRMS: Float = 0.005
