@@ -22,8 +22,6 @@ Please read these limitations before filing an issue — they are known:
 |---|---|
 | **Diarization is post-session, not live** | While a session runs, all remote audio is labeled `Others`. The `Speaker 1…N` split is computed **after** you stop. Live per-speaker labels are planned, not shipped. |
 | **Memory grows with session length** | Whole-session audio is held in RAM — roughly **460 MB per hour** across both lanes. Multi-hour sessions are memory-hungry; spill-to-disk is planned. |
-| **Cross-lane timestamps can be skewed** | Lane A and Lane B timestamps are derived per-lane, so the merged transcript can be off by a few hundred milliseconds between lanes. |
-| **Lane B resampling is not anti-aliased** | System audio is resampled 48 kHz → 16 kHz with linear interpolation and no lowpass filter, which costs some accuracy on remote voices. |
 | **Short utterances may be dropped** | The hallucination filter discards very short output, which can swallow legitimate one- or two-character replies — particularly in Chinese, Japanese, and other non-Latin scripts. |
 | **Fixed voice-detection thresholds** | Speech detection uses absolute RMS thresholds. A very quiet or very hot microphone may need code changes to work well. |
 | **Settings do not persist** | `/lang`, `/model`, `/speakers`, and `/dump` changes are lost when you quit. |
@@ -130,7 +128,7 @@ listnr> /live 30           # 30 seconds then report
 listnr> /live 300          # 5 minutes then report
 ```
 
-5. To finish: type `q` or `/stop` and press Enter. (Ctrl+C also works **while live**; at the idle prompt it is currently unreliable — see Status.)
+5. To finish: type `q` or `/stop` and press Enter, or press **Ctrl+C**.
 6. You get a transcript on screen; Markdown is saved to `~/Documents/Listnr/`.
 
 ### Language
@@ -166,7 +164,7 @@ listnr models list
 
 The final transcript goes to **stdout**; progress, level meters, and diagnostics go to **stderr** — so you can redirect just the transcript. A structured `--json` output is planned.
 
-> Note: passing `--language` and `--model` together can silently conflict. If you pick an English-only model with a non-English language, the language is ignored without warning. Set one or the other until this is fixed.
+> Known gap: passing `--language` and `--model` together can silently conflict. If you pick an English-only model with a non-English language, the language is ignored without warning. Set one or the other until this is fixed.
 
 ---
 

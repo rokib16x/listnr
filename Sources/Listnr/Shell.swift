@@ -1,6 +1,39 @@
 import ArgumentParser
 import Foundation
 
+/// Shell state shared with the signal handler, which runs on its own queue.
+private final class ShellState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var activeRunner: LiveSessionRunner?
+    private var interrupts = 0
+
+    var runner: LiveSessionRunner? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return activeRunner
+        }
+        set {
+            lock.lock()
+            activeRunner = newValue
+            lock.unlock()
+        }
+    }
+
+    func bumpInterrupt() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        interrupts += 1
+        return interrupts
+    }
+
+    func resetInterrupts() {
+        lock.lock()
+        interrupts = 0
+        lock.unlock()
+    }
+}
+
 /// Interactive shell: `listnr` → `/live`, `/lang`, …
 struct Shell: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -30,35 +63,38 @@ struct Shell: ParsableCommand {
         print("listnr  ·  type /help  ·  Ctrl+C exits when idle")
         printStatus(options)
 
-        var activeRunner: LiveSessionRunner?
-        let runnerLock = NSLock()
-        var sigintCount = 0
+        let state = ShellState()
+        let stdin = StdinReader()
+        stdin.start()
 
-        let sigint = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
+        // Ignore the default disposition *before* the dispatch source exists, so
+        // there is no window where a Ctrl+C would kill the process outright.
+        signal(SIGINT, SIG_IGN)
+
+        // A dedicated queue, not `.main`. The main thread spends its time blocked
+        // in the prompt or pumping a session's run loop, and a handler queued on
+        // `.main` does not run while it is blocked — so Ctrl+C at an idle prompt
+        // did nothing, then fired later and cancelled the *next* /live session.
+        let signalQueue = DispatchQueue(label: "listnr.signal")
+        let sigint = DispatchSource.makeSignalSource(signal: SIGINT, queue: signalQueue)
         sigint.setEventHandler {
-            runnerLock.lock()
-            let runner = activeRunner
-            runnerLock.unlock()
-            if let runner {
-                sigintCount += 1
-                if sigintCount >= 2 {
-                    FileHandle.standardError.write(Data("\n⌃C again — force quit\n".utf8))
-                    Darwin.exit(130)
-                }
-                FileHandle.standardError.write(Data("\n⌃C — cancelling (download/live)…  press Ctrl+C again to force quit\n".utf8))
-                runner.requestStop()
-            } else {
+            guard let runner = state.runner else {
                 FileHandle.standardError.write(Data("\nbye\n".utf8))
                 Darwin.exit(0)
             }
+            if state.bumpInterrupt() >= 2 {
+                FileHandle.standardError.write(Data("\n⌃C again — force quit\n".utf8))
+                Darwin.exit(130)
+            }
+            FileHandle.standardError.write(Data("\n⌃C — cancelling (download/live)…  press Ctrl+C again to force quit\n".utf8))
+            runner.requestStop()
         }
         sigint.resume()
-        signal(SIGINT, SIG_IGN)
 
         while true {
             fputs("listnr> ", stdout)
             fflush(stdout)
-            guard let line = readLine(strippingNewline: true) else {
+            guard let line = stdin.nextLine() else {
                 print("bye")
                 break
             }
@@ -125,13 +161,10 @@ struct Shell: ParsableCommand {
                 print("diarize → \(options.diarize ? "on" : "off")")
 
             case "/live", "live":
-                runnerLock.lock()
-                if activeRunner != nil {
-                    runnerLock.unlock()
+                if state.runner != nil {
                     print("already live — Ctrl+C or wait")
                     continue
                 }
-                runnerLock.unlock()
 
                 var liveOpts = options
                 if let raw = args.first {
@@ -146,11 +179,13 @@ struct Shell: ParsableCommand {
                 }
 
                 let runner = LiveSessionRunner(options: liveOpts)
-                runnerLock.lock()
-                activeRunner = runner
-                runnerLock.unlock()
+                state.runner = runner
 
-                installLiveStdinHandler(runner: runner)
+                stdin.setLiveHandler { line in
+                    guard Self.isStopCommand(line) else { return false }
+                    runner.requestStop()
+                    return true
+                }
 
                 do {
                     _ = try runner.runBlocking()
@@ -160,17 +195,12 @@ struct Shell: ParsableCommand {
                     FileHandle.standardError.write(Data("live failed: \(error.localizedDescription)\n".utf8))
                 }
 
-                removeLiveStdinHandler()
-                runnerLock.lock()
-                activeRunner = nil
-                sigintCount = 0
-                runnerLock.unlock()
+                stdin.setLiveHandler(nil)
+                state.runner = nil
+                state.resetInterrupts()
 
             case "/stop", "stop":
-                runnerLock.lock()
-                let runner = activeRunner
-                runnerLock.unlock()
-                if let runner {
+                if let runner = state.runner {
                     runner.requestStop()
                     print("stopping…")
                 } else {
@@ -178,10 +208,7 @@ struct Shell: ParsableCommand {
                 }
 
             case "q", "/q", "quit", "exit", "/quit", "/exit":
-                runnerLock.lock()
-                let runner = activeRunner
-                runnerLock.unlock()
-                if let runner {
+                if let runner = state.runner {
                     runner.requestStop()
                     print("stopping…")
                 } else {
@@ -195,23 +222,10 @@ struct Shell: ParsableCommand {
         }
     }
 
-    /// While live, type `q` or `/stop` + Enter (non-blocking vs the prompt).
-    private func installLiveStdinHandler(runner: LiveSessionRunner) {
-        let handle = FileHandle.standardInput
-        handle.readabilityHandler = { file in
-            let data = file.availableData
-            guard !data.isEmpty, let text = String(data: data, encoding: .utf8) else { return }
-            for raw in text.split(whereSeparator: \.isNewline) {
-                let t = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                if t == "q" || t == "/q" || t == "/stop" || t == "stop" {
-                    runner.requestStop()
-                }
-            }
-        }
-    }
-
-    private func removeLiveStdinHandler() {
-        FileHandle.standardInput.readabilityHandler = nil
+    /// While live, `q` or `/stop` + Enter finishes the session.
+    private static func isStopCommand(_ line: String) -> Bool {
+        let t = line.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return t == "q" || t == "/q" || t == "/stop" || t == "stop"
     }
 
     private func printHelp() {

@@ -62,10 +62,16 @@ actor WhisperKitTranscriber: Transcriber {
         FileHandle.standardError.write(Data("✓ \(model.id) ready\n".utf8))
     }
 
+    /// Transcribe one clip. Too short to be speech is rejected here; deciding
+    /// whether a clip is *loud enough* is the caller's job.
+    ///
+    /// This deliberately does **not** apply its own RMS floor. It used to reject
+    /// anything below 0.018, which silently overrode callers that had already
+    /// made a considered decision — diarized spans admitted at 0.005 were
+    /// dropped here and returned as empty text, so quiet remote speakers simply
+    /// vanished from the transcript with nothing logged.
     func transcribe(_ audio: [Float]) async throws -> String {
-        // Reject near-silence before Whisper (stops “Thank you” hallucinations).
-        let rms = AudioMath.rms(audio)
-        guard rms >= 0.018, audio.count >= Int(16_000 * 0.35) else { return "" }
+        guard audio.count >= Int(16_000 * 0.35) else { return "" }
 
         if pipeline == nil { try await warmUp() }
         guard let pipeline else { throw TranscriberError.notLoaded }

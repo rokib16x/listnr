@@ -23,12 +23,21 @@ final class MicCapture {
     private var converter: AVAudioConverter?
     private var samples: [Float] = []
     private var isRecording = false
+    private var firstSampleHostSeconds: Double?
     private let lock = NSLock()
 
     var onLevel: ((Float) -> Void)?
     var onSamples: (([Float]) -> Void)?
 
     var isRunning: Bool { isRecording }
+
+    /// Host-clock time of the first captured sample, or nil if nothing arrived.
+    /// Used to place this lane on the shared session timeline.
+    var firstSampleTime: Double? {
+        lock.lock()
+        defer { lock.unlock() }
+        return firstSampleHostSeconds
+    }
 
     func start() throws {
         guard !isRecording else { return }
@@ -65,10 +74,11 @@ final class MicCapture {
 
         lock.lock()
         samples.removeAll(keepingCapacity: true)
+        firstSampleHostSeconds = nil
         lock.unlock()
 
-        input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-            self?.process(buffer: buffer, converter: converter, targetFormat: targetFormat)
+        input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, when in
+            self?.process(buffer: buffer, when: when, converter: converter, targetFormat: targetFormat)
         }
 
         do {
@@ -100,6 +110,7 @@ final class MicCapture {
 
     private func process(
         buffer: AVAudioPCMBuffer,
+        when: AVAudioTime,
         converter: AVAudioConverter,
         targetFormat: AVAudioFormat
     ) {
@@ -110,25 +121,25 @@ final class MicCapture {
             return
         }
 
-        var consumed = false
-        let inputBlock: AVAudioConverterInputBlock = { _, status in
-            if consumed {
-                status.pointee = .noDataNow
-                return nil
-            }
-            consumed = true
-            status.pointee = .haveData
-            return buffer
-        }
+        // A box rather than a captured `var`: the input block is @Sendable, so
+        // mutating captured state in it is a race under Swift 6.
+        let feed = ConverterFeed(buffer)
 
         var error: NSError?
-        let status = converter.convert(to: outBuffer, error: &error, withInputFrom: inputBlock)
+        let status = converter.convert(to: outBuffer, error: &error, withInputFrom: feed.inputBlock)
         guard status != .error, let channelData = outBuffer.floatChannelData else { return }
 
         let count = Int(outBuffer.frameLength)
+        guard count > 0 else { return }
         let chunk = Array(UnsafeBufferPointer(start: channelData[0], count: count))
 
         lock.lock()
+        if firstSampleHostSeconds == nil, when.isHostTimeValid {
+            // Timestamp of the *start* of this buffer, on the host clock — the
+            // same clock ScreenCaptureKit stamps Lane B with, so the two lanes
+            // can share a timeline.
+            firstSampleHostSeconds = HostClock.seconds(fromHostTime: when.hostTime)
+        }
         samples.append(contentsOf: chunk)
         lock.unlock()
 

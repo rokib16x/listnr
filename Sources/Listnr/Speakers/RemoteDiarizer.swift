@@ -81,20 +81,29 @@ enum DiarizedTranscriber {
         spans: [DiarizedSpan],
         transcriber: WhisperKitTranscriber,
         padBeforeSeconds: Double = 0.35,
-        padAfterSeconds: Double = 0.20
+        padAfterSeconds: Double = 0.20,
+        minSpanRMS: Float = 0.005
     ) async -> [TranscriptLine] {
         var lines: [TranscriptLine] = []
         let padBefore = Int(padBeforeSeconds * sampleRate)
         let padAfter = Int(padAfterSeconds * sampleRate)
 
         for span in spans {
-            let rawStart = Int(span.startSeconds * sampleRate)
-            let rawEnd = Int(span.endSeconds * sampleRate)
+            let rawStart = max(0, Int(span.startSeconds * sampleRate))
+            let rawEnd = min(audio.count, Int(span.endSeconds * sampleRate))
             let start = max(0, rawStart - padBefore)
             let end = min(audio.count, rawEnd + padAfter)
-            guard end > start else { continue }
+            guard end > start, rawEnd > rawStart else { continue }
+
+            // Measure loudness on the span SpeakerKit actually found, but
+            // transcribe the padded slice. Measuring the padded slice would
+            // penalise exactly what the padding is for: the leading silence
+            // drags the average down, so a real but quiet utterance falls under
+            // the floor precisely because we widened it.
+            let core = Array(audio[rawStart..<rawEnd])
+            guard AudioMath.rms(core) >= minSpanRMS else { continue }
+
             let slice = Array(audio[start..<end])
-            guard AudioMath.rms(slice) >= 0.005 else { continue }
             do {
                 let text = try await transcriber.transcribe(slice)
                 guard !text.isEmpty else { continue }

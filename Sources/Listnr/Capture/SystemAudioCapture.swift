@@ -4,7 +4,7 @@ import Foundation
 import ScreenCaptureKit
 
 /// Lane B — speaker / system audio via ScreenCaptureKit (app-agnostic).
-/// Anything playing through the Mac’s output (Discord, Zoom, browser, …) lands here.
+/// Anything playing through the Mac's output (Discord, Zoom, browser, …) lands here.
 /// Samples are converted to 16 kHz mono Float32 — never mixed with the mic lane.
 final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     enum CaptureError: Error, LocalizedError {
@@ -26,20 +26,46 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     static let nativeSampleRate = 48_000
     static let targetSampleRate: Double = 16_000
 
+    private static let targetFormat = AVAudioFormat(
+        commonFormat: .pcmFormatFloat32,
+        sampleRate: SystemAudioCapture.targetSampleRate,
+        channels: 1,
+        interleaved: false
+    )!
+
     private var stream: SCStream?
     private let sampleQueue = DispatchQueue(label: "listnr.system-audio", qos: .userInitiated)
     private var samples: [Float] = []
-    private var isRecording = false
+    private let stateLock = NSLock()
+    private var recording = false
+    /// Touched only on `sampleQueue`.
     private var converter: AVAudioConverter?
-    private var targetFormat: AVAudioFormat?
+    private var converterInputFormat: AVAudioFormat?
+    private var firstSampleHostSeconds: Double?
 
     var onLevel: ((Float) -> Void)?
     var onSamples: (([Float]) -> Void)?
 
-    var isRunning: Bool { isRecording }
+    var isRunning: Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return recording
+    }
+
+    /// Host-clock time of the first captured sample, or nil if nothing arrived.
+    /// Used to place this lane on the shared session timeline.
+    var firstSampleTime: Double? {
+        sampleQueue.sync { firstSampleHostSeconds }
+    }
+
+    private func setRecording(_ value: Bool) {
+        stateLock.lock()
+        recording = value
+        stateLock.unlock()
+    }
 
     func start() async throws {
-        guard !isRecording else { return }
+        guard !isRunning else { return }
 
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         guard let display = content.displays.first else {
@@ -64,6 +90,9 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
         sampleQueue.sync {
             samples.removeAll(keepingCapacity: true)
+            converter = nil
+            converterInputFormat = nil
+            firstSampleHostSeconds = nil
         }
 
         do {
@@ -73,22 +102,22 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         }
 
         self.stream = stream
-        isRecording = true
+        setRecording(true)
     }
 
     @discardableResult
     func stop() async -> [Float] {
-        guard isRecording else { return [] }
-        isRecording = false
+        guard isRunning else { return [] }
+        setRecording(false)
 
         if let stream {
             try? await stream.stopCapture()
         }
         stream = nil
-        converter = nil
-        targetFormat = nil
 
         return sampleQueue.sync {
+            converter = nil
+            converterInputFormat = nil
             let captured = samples
             samples.removeAll(keepingCapacity: true)
             return captured
@@ -98,12 +127,20 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     // MARK: - SCStreamOutput
 
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of type: SCStreamOutputType) {
-        guard type == .audio, isRecording else { return }
-        guard let chunk = Self.floatMono16k(from: sampleBuffer, converter: &converter, targetFormat: &targetFormat),
-              !chunk.isEmpty
-        else { return }
+        guard type == .audio, isRunning else { return }
 
-        // Already on sampleQueue.
+        // Already on sampleQueue — converter state is single-threaded here.
+        if firstSampleHostSeconds == nil {
+            // SCK presentation timestamps are on the host clock, the same clock
+            // AVAudioTime.hostTime uses, so the two lanes are directly comparable.
+            let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            if pts.isValid, !pts.isIndefinite {
+                firstSampleHostSeconds = CMTimeGetSeconds(pts)
+            }
+        }
+
+        guard let chunk = mono16k(from: sampleBuffer), !chunk.isEmpty else { return }
+
         samples.append(contentsOf: chunk)
         onLevel?(AudioMath.rms(chunk))
         onSamples?(chunk)
@@ -111,83 +148,96 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         FileHandle.standardError.write(Data("system audio stream stopped: \(error.localizedDescription)\n".utf8))
-        isRecording = false
+        setRecording(false)
     }
 
     // MARK: - PCM extract + resample
 
-    private static func floatMono16k(
-        from sampleBuffer: CMSampleBuffer,
-        converter: inout AVAudioConverter?,
-        targetFormat: inout AVAudioFormat?
-    ) -> [Float]? {
+    /// Convert one ScreenCaptureKit audio buffer to 16 kHz mono Float32.
+    ///
+    /// Uses `AVAudioConverter` rather than hand-rolled interpolation. That
+    /// matters: decimating 48 kHz → 16 kHz is a 3:1 ratio, and without a
+    /// lowpass everything above 8 kHz folds back into the speech band as
+    /// aliasing distortion — degrading both Whisper's transcription and
+    /// SpeakerKit's embeddings, on the lane that carries every remote voice.
+    /// The converter also handles the stereo → mono downmix, so no channel is
+    /// silently discarded.
+    ///
+    /// Must run on `sampleQueue`.
+    private func mono16k(from sampleBuffer: CMSampleBuffer) -> [Float]? {
         guard let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer),
               let asbdPtr = CMAudioFormatDescriptionGetStreamBasicDescription(formatDesc)
         else { return nil }
 
-        let asbd = asbdPtr.pointee
-        let channels = Int(asbd.mChannelsPerFrame)
-        let sampleRate = asbd.mSampleRate
-        guard channels > 0, sampleRate > 0 else { return nil }
+        var asbd = asbdPtr.pointee
+        guard let inputFormat = AVAudioFormat(streamDescription: &asbd) else { return nil }
 
-        guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return nil }
-        var length = 0
-        var dataPointer: UnsafeMutablePointer<Int8>?
-        guard CMBlockBufferGetDataPointer(blockBuffer, atOffset: 0, lengthAtOffsetOut: nil, totalLengthOut: &length, dataPointerOut: &dataPointer) == noErr,
-              let dataPointer, length > 0
-        else { return nil }
+        let frames = CMSampleBufferGetNumSamples(sampleBuffer)
+        guard frames > 0 else { return nil }
 
-        // ScreenCaptureKit typically delivers non-interleaved Float32 or interleaved Float32.
-        let frameCount: Int
-        let mono: [Float]
-
-        if asbd.mFormatFlags & kAudioFormatFlagIsFloat != 0 {
-            let floatCount = length / MemoryLayout<Float>.size
-            let floats = UnsafeBufferPointer(
-                start: UnsafeRawPointer(dataPointer).bindMemory(to: Float.self, capacity: floatCount),
-                count: floatCount
-            )
-            if asbd.mFormatFlags & kAudioFormatFlagIsNonInterleaved != 0 {
-                frameCount = floatCount / channels
-                // First channel plane.
-                mono = Array(floats.prefix(frameCount))
-            } else {
-                frameCount = floatCount / channels
-                var out = [Float]()
-                out.reserveCapacity(frameCount)
-                for i in 0..<frameCount {
-                    var sum: Float = 0
-                    for ch in 0..<channels {
-                        sum += floats[i * channels + ch]
-                    }
-                    out.append(sum / Float(channels))
-                }
-                mono = out
+        if converter == nil || converterInputFormat != inputFormat {
+            converter = AVAudioConverter(from: inputFormat, to: Self.targetFormat)
+            converterInputFormat = inputFormat
+            if converter == nil {
+                FileHandle.standardError.write(Data(
+                    "system audio: cannot convert \(inputFormat) to 16 kHz mono\n".utf8
+                ))
+                return nil
             }
-        } else {
-            // 16-bit PCM interleaved fallback.
-            let shortCount = length / MemoryLayout<Int16>.size
-            let shorts = UnsafeBufferPointer(
-                start: UnsafeRawPointer(dataPointer).bindMemory(to: Int16.self, capacity: shortCount),
-                count: shortCount
-            )
-            frameCount = shortCount / max(channels, 1)
-            var out = [Float]()
-            out.reserveCapacity(frameCount)
-            for i in 0..<frameCount {
-                var sum: Float = 0
-                for ch in 0..<channels {
-                    sum += Float(shorts[i * channels + ch]) / 32768.0
+        }
+        guard let converter else { return nil }
+
+        guard let inBuffer = AVAudioPCMBuffer(
+            pcmFormat: inputFormat,
+            frameCapacity: AVAudioFrameCount(frames)
+        ) else { return nil }
+        inBuffer.frameLength = AVAudioFrameCount(frames)
+
+        // Point the PCM buffer's AudioBufferList at the sample buffer's data
+        // instead of copying. `blockBuffer` owns that memory, so it has to stay
+        // alive for as long as `inBuffer` is read — hence withExtendedLifetime
+        // around the conversion below.
+        let audioBufferList = inBuffer.mutableAudioBufferList
+        guard audioBufferList.pointee.mNumberBuffers > 0 else { return nil }
+        let listSize = MemoryLayout<AudioBufferList>.size
+            + Int(audioBufferList.pointee.mNumberBuffers - 1) * MemoryLayout<AudioBuffer>.size
+
+        var blockBuffer: CMBlockBuffer?
+        let status = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
+            sampleBuffer,
+            bufferListSizeNeededOut: nil,
+            bufferListOut: audioBufferList,
+            bufferListSize: listSize,
+            blockBufferAllocator: kCFAllocatorDefault,
+            blockBufferMemoryAllocator: kCFAllocatorDefault,
+            flags: kCMSampleBufferFlag_AudioBufferList_Assure16ByteAlignment,
+            blockBufferOut: &blockBuffer
+        )
+        guard status == noErr, blockBuffer != nil else { return nil }
+
+        return withExtendedLifetime(blockBuffer) { () -> [Float]? in
+            let ratio = Self.targetSampleRate / inputFormat.sampleRate
+            let capacity = AVAudioFrameCount(Double(frames) * ratio) + 1024
+            guard let outBuffer = AVAudioPCMBuffer(
+                pcmFormat: Self.targetFormat,
+                frameCapacity: capacity
+            ) else { return nil }
+
+            let feed = ConverterFeed(inBuffer)
+            var error: NSError?
+            let result = converter.convert(to: outBuffer, error: &error, withInputFrom: feed.inputBlock)
+            guard result != .error, let channelData = outBuffer.floatChannelData else {
+                if let error {
+                    FileHandle.standardError.write(Data(
+                        "system audio convert failed: \(error.localizedDescription)\n".utf8
+                    ))
                 }
-                out.append(sum / Float(channels))
+                return nil
             }
-            mono = out
-        }
 
-        if abs(sampleRate - targetSampleRate) < 1 {
-            return mono
+            let count = Int(outBuffer.frameLength)
+            guard count > 0 else { return nil }
+            return Array(UnsafeBufferPointer(start: channelData[0], count: count))
         }
-
-        return AudioMath.resampleLinear(mono, from: sampleRate, to: targetSampleRate)
     }
 }

@@ -68,8 +68,7 @@ The pure, easily testable pieces are:
 
 | Component | What to assert |
 |---|---|
-| `EnergyVAD` | Onset retention across a pause; segment boundaries; `maxSpeechSeconds` splitting |
-| `AudioMath.resampleLinear` | Output length and shape against a reference for known rates |
+| `EnergyVAD` | Onset retention across a pause; transient rejection (clicks vs short words); segment boundaries; `maxSpeechSeconds` splitting; stability across buffer sizes |
 | `WAVWriter` | Byte-exact header; round-trip through `AVAudioFile` |
 | `WhisperKitTranscriber.sanitize` / `isHallucination` | Table-driven cases, including CJK and Bangla input |
 | `TranscriptMerger.merge` | Ordering, and stability across equal timestamps |
@@ -88,8 +87,8 @@ where there is no microphone, no ANE, and no permissions.
 
 ## Concurrency — please read this before touching the audio path
 
-Listnr has **known data races**, and they are the source of most of its real
-bugs. Do not add more.
+Listnr had **known data races**, and they were the source of most of its real
+bugs. Four strict-concurrency diagnostics remain (see below). Do not add more.
 
 Check your work before opening a PR:
 
@@ -97,7 +96,9 @@ Check your work before opening a PR:
 swift build -Xswiftc -strict-concurrency=complete
 ```
 
-This currently reports pre-existing warnings. **Do not add new ones**, and
+As of the latest commit this reports **4** remaining warnings, all in
+`MeetingSession`, `LiveSessionRunner`, `Listnr.swift`, and
+`WhisperKitTranscriber`. **Do not add new ones**, and
 please do not "fix" them with `@unchecked Sendable` or `nonisolated(unsafe)`
 unless you can explain in the PR why the access is genuinely safe.
 
@@ -175,17 +176,19 @@ If you want somewhere to start, in rough order of value:
    CI output is readable.
 3. **`--version`** — currently `listnr --version` prints a confusing
    `Usage: listnr shell`. Needs `version:` in `CommandConfiguration`.
-4. **Anti-aliased Lane B resampling.** 48 kHz → 16 kHz currently uses bare
-   linear interpolation with no lowpass, which aliases everything above 8 kHz
-   back into the speech band. Use `AVAudioConverter`, as the mic lane already
-   does. This is the single biggest transcription-quality win available.
-5. **`--json` and `--output <path>`** for machine-readable transcripts.
-6. **Adaptive VAD thresholds.** They are fixed absolute RMS values today
+4. **`--json` and `--output <path>`** for machine-readable transcripts.
+5. **Adaptive VAD thresholds.** They are fixed absolute RMS values today
    (0.014, 0.018, 0.022, 0.025 …, scattered across four files). Microphone gain
    varies by more than 20 dB across hardware. Consolidate them into one struct
    and derive from a rolling noise floor.
-7. **Wire up `Config.save()`.** It exists and is never called, so every `/lang`,
+6. **Wire up `Config.save()`.** It exists and is never called, so every `/lang`,
    `/model`, and `/speakers` change is lost on exit.
+7. **Spill session audio to disk.** Both lanes are held in RAM for the whole
+   session (~460 MB/hour combined), which is what stops "hours OK" from being
+   true. Needs chunked diarization too.
+8. **Retire `MeetingSession.shared`.** The singleton makes concurrent sessions
+   impossible and export untestable, and it stamps the export with the meeting's
+   *end* time.
 
 ## Reporting bugs
 

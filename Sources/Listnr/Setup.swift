@@ -3,6 +3,25 @@ import AVFoundation
 import CoreGraphics
 import Foundation
 
+/// Carries a permission result out of a completion handler on another thread.
+private final class PermissionOutcome: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+
+    var granted: Bool {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return value
+        }
+        set {
+            lock.lock()
+            value = newValue
+            lock.unlock()
+        }
+    }
+}
+
 struct Setup: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Walk through first-run permission setup for Listnr."
@@ -43,13 +62,13 @@ struct Setup: ParsableCommand {
         case .notDetermined:
             print("→ requesting microphone access...")
             let semaphore = DispatchSemaphore(value: 0)
-            var granted = false
+            let outcome = PermissionOutcome()
             AVCaptureDevice.requestAccess(for: .audio) { ok in
-                granted = ok
+                outcome.granted = ok
                 semaphore.signal()
             }
             semaphore.wait()
-            if granted {
+            if outcome.granted {
                 print("  ✓ microphone granted")
             } else {
                 print("  ✗ microphone denied")

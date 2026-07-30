@@ -133,15 +133,15 @@ final class LiveSessionRunner {
         }
         session.onSystemLevel = { lastSys = $0 }
 
+        // Hand buffers straight to the lane pipeline. Deliberately *not*
+        // `Task { await lane.push(chunk) }`: unstructured tasks have no ordering
+        // guarantee, so audio would reach the VAD shuffled. `push` is
+        // synchronous, non-blocking, and preserves capture order.
         if let youLane {
-            session.onMicSamples = { chunk in
-                Task { await youLane.push(chunk) }
-            }
+            session.onMicSamples = { chunk in youLane.push(chunk) }
         }
         if let othersLane {
-            session.onSystemSamples = { chunk in
-                Task { await othersLane.push(chunk) }
-            }
+            session.onSystemSamples = { chunk in othersLane.push(chunk) }
         }
 
         let meter = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
@@ -234,7 +234,12 @@ final class LiveSessionRunner {
         transcriber: WhisperKitTranscriber,
         result: DualCaptureSession.Result
     ) async -> [TranscriptLine] {
-        var you = await youLane.finish()
+        // Lane A and Lane B start milliseconds apart, so each lane's
+        // sample-count timestamps sit on its own zero. Shift both onto a shared
+        // session clock before merging, or the transcript interleaves wrongly.
+        let offsets = result.laneOffsets
+
+        var you = TranscriptMerger.shift(await youLane.finish(), by: offsets.mic)
         _ = await othersLane.finish()
 
         if you.isEmpty, AudioMath.rms(result.mic) >= 0.008 {
@@ -274,7 +279,7 @@ final class LiveSessionRunner {
             }
         }
 
-        return TranscriptMerger.merge([you, remote])
+        return TranscriptMerger.merge([you, TranscriptMerger.shift(remote, by: offsets.system)])
     }
 }
 

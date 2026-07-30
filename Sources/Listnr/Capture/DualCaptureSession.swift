@@ -7,6 +7,30 @@ final class DualCaptureSession {
         let mic: [Float]
         let system: [Float]
         let durationSeconds: Double
+        /// Host-clock time of each lane's first sample, when known. The lanes
+        /// start milliseconds apart, so their sample-count timestamps are not
+        /// directly comparable — these anchor both onto one session timeline.
+        let micFirstSampleTime: Double?
+        let systemFirstSampleTime: Double?
+
+        /// Seconds to add to each lane's timestamps to place them on a shared
+        /// clock whose zero is whichever lane started first.
+        /// Returns `(0, 0)` when the measurement is missing or implausible.
+        var laneOffsets: (mic: Double, system: Double) {
+            guard let m = micFirstSampleTime, let s = systemFirstSampleTime else { return (0, 0) }
+            let skew = abs(m - s)
+            // A real start gap is tens to hundreds of milliseconds. Anything
+            // larger means the two clocks are not comparable on this system, and
+            // shifting by a bogus amount is worse than not shifting at all.
+            guard skew <= 5 else {
+                FileHandle.standardError.write(Data(
+                    String(format: "! lane clock skew %.1fs looks wrong — merging without an offset\n", skew).utf8
+                ))
+                return (0, 0)
+            }
+            let origin = min(m, s)
+            return (m - origin, s - origin)
+        }
     }
 
     enum SessionError: Error, LocalizedError {
@@ -92,12 +116,21 @@ final class DualCaptureSession {
     }
 
     func stop() async -> Result {
+        // Read the anchors before stopping — `stop()` clears per-run state.
+        let micAnchor = mic.firstSampleTime
+        let systemAnchor = system.firstSampleTime
         let micSamples = mic.stop()
         let systemSamples = await system.stop()
         let duration = startedAt.map { Date().timeIntervalSince($0) } ?? 0
         startedAt = nil
         running = false
-        return Result(mic: micSamples, system: systemSamples, durationSeconds: duration)
+        return Result(
+            mic: micSamples,
+            system: systemSamples,
+            durationSeconds: duration,
+            micFirstSampleTime: micAnchor,
+            systemFirstSampleTime: systemAnchor
+        )
     }
 
     /// Capture for a fixed duration (M1 verification helper).

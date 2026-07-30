@@ -8,24 +8,33 @@ enum AudioMath {
         return Float((sum / Double(samples.count)).squareRoot())
     }
 
-    /// Simple linear resampler (good enough for STT preprocess).
-    static func resampleLinear(_ input: [Float], from: Double, to: Double) -> [Float] {
-        guard !input.isEmpty, from > 0, to > 0 else { return input }
-        if abs(from - to) < 0.5 { return input }
+    /// Peak absolute sample value. Cheap clipping check.
+    static func peak(_ samples: [Float]) -> Float {
+        var m: Float = 0
+        for s in samples { m = max(m, abs(s)) }
+        return m
+    }
+}
 
-        let ratio = to / from
-        let outCount = max(1, Int((Double(input.count) * ratio).rounded()))
-        var output = [Float](repeating: 0, count: outCount)
-        let last = input.count - 1
+/// Converts mach absolute times to seconds on the host clock.
+///
+/// Both capture lanes report the timestamp of their first sample on this clock —
+/// `AVAudioTime.hostTime` for the mic and the presentation timestamp for
+/// ScreenCaptureKit — which is what lets their transcripts share one timeline.
+enum HostClock {
+    private static let scale: Double = {
+        var info = mach_timebase_info_data_t()
+        mach_timebase_info(&info)
+        guard info.denom != 0 else { return 1 }
+        return Double(info.numer) / Double(info.denom) / 1_000_000_000
+    }()
 
-        for i in 0..<outCount {
-            let src = Double(i) / ratio
-            let i0 = Int(src)
-            let i1 = min(i0 + 1, last)
-            let t = Float(src - Double(i0))
-            output[i] = input[i0] * (1 - t) + input[i1] * t
-        }
-        return output
+    static func seconds(fromHostTime hostTime: UInt64) -> Double {
+        Double(hostTime) * scale
+    }
+
+    static func now() -> Double {
+        seconds(fromHostTime: mach_absolute_time())
     }
 }
 

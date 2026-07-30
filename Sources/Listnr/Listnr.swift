@@ -72,12 +72,15 @@ struct Start: ParsableCommand {
         }
 
         let runner = LiveSessionRunner(options: options)
-        var force = 0
+        let interrupts = InterruptCounter()
 
-        let sigint = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
+        // SIG_IGN before the source exists, so no Ctrl+C slips through with the
+        // default disposition and kills the process mid-session.
+        signal(SIGINT, SIG_IGN)
+        let signalQueue = DispatchQueue(label: "listnr.signal")
+        let sigint = DispatchSource.makeSignalSource(signal: SIGINT, queue: signalQueue)
         sigint.setEventHandler {
-            force += 1
-            if force >= 2 {
+            if interrupts.bump() >= 2 {
                 FileHandle.standardError.write(Data("\n⌃C again — force quit\n".utf8))
                 Darwin.exit(130)
             }
@@ -85,7 +88,6 @@ struct Start: ParsableCommand {
             runner.requestStop()
         }
         sigint.resume()
-        signal(SIGINT, SIG_IGN)
 
         do {
             _ = try runner.runBlocking()
@@ -96,6 +98,19 @@ struct Start: ParsableCommand {
             FileHandle.standardError.write(Data("start failed: \(error.localizedDescription)\n".utf8))
             throw ExitCode(1)
         }
+    }
+}
+
+/// Ctrl+C tally, shared with a signal handler on its own queue.
+final class InterruptCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    func bump() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        count += 1
+        return count
     }
 }
 
