@@ -1,5 +1,5 @@
 import XCTest
-@testable import listnr
+@testable import ListnrCore
 
 /// Synthetic-audio checks for the energy VAD, including the two floors that
 /// exist because the pre-roll and hangover padding defeat a plain duration

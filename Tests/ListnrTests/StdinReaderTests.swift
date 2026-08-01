@@ -1,5 +1,5 @@
 import XCTest
-@testable import listnr
+@testable import ListnrCore
 
 /// One thread owns stdin for the whole process; these cover the buffering and
 /// hand-off rules that let the prompt and a live session share it without

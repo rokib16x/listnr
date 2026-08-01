@@ -1,5 +1,5 @@
 import XCTest
-@testable import listnr
+@testable import ListnrCore
 
 /// Regression tests for the defect that made `0.1.0-beta` unusable: a graceful
 /// `/stop` was routed through the same cancel mechanism as Ctrl+C, so the

@@ -1,18 +1,23 @@
 import ArgumentParser
 import Foundation
 
-/// Bumped as part of cutting a release; keep in step with CHANGELOG.md.
-let listnrVersion = "0.1.1-beta"
-
-@main
-struct Listnr: ParsableCommand {
-    static let configuration = CommandConfiguration(
+/// The root command, and the only symbol the `listnr` executable needs.
+///
+/// Public because it crosses the module boundary into `Sources/listnr`. The
+/// subcommands stay internal: they are only ever named here, inside the same
+/// module, so none of them has to become part of `ListnrCore`'s API. Keeping the
+/// public surface at exactly one type means the library can be reshaped freely
+/// until there is a second consumer worth committing to.
+public struct Listnr: ParsableCommand {
+    public static let configuration = CommandConfiguration(
         commandName: "listnr",
         abstract: "Local meeting listener. Mic + speakers → multi-speaker transcript on Apple Silicon.",
         version: listnrVersion,
         subcommands: [Shell.self, Start.self, Doctor.self, Setup.self, Models.self],
         defaultSubcommand: Shell.self
     )
+
+    public init() {}
 }
 
 struct Start: ParsableCommand {

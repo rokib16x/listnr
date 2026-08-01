@@ -78,6 +78,12 @@ While the version is `0.x`, the CLI surface may change in any minor release.
   character-level pass for Han, Kana, and Hangul, which are not word-spaced.
 - `Locked<T>`, one audited generic replacing the lock-plus-`@unchecked Sendable`
   shape that had been hand-written five times.
+- `scripts/check-version.sh`, run by CI, asserting that the version in
+  `Sources/ListnrCore/Version.swift`, the version the built binary reports, the
+  git tag, and the CHANGELOG heading all agree. A tag that disagrees with
+  `listnr --version` is invisible until someone files a bug against a release
+  that never existed — and once tags drive release tarballs and a Homebrew
+  formula, the same mismatch ships a checksum belonging to another version.
 - Tests for the stop-versus-cancel rule (extracted to `SessionStopState`), the
   stdin reader's buffering and live hand-off, and `LanguageMode` /
   `SessionOptions` / `ModelRegistry`. With the script-tuning, repetition-guard,
@@ -85,6 +91,15 @@ While the version is `0.x`, the CLI surface may change in any minor release.
 
 ### Changed
 
+- **The package is split into a `ListnrCore` library and a one-line `listnr`
+  executable.** The tests used to `@testable import` an executable target, which
+  works but is not what executable targets are for, and it left no way for
+  anything else to depend on the logic — including the menubar app on the
+  roadmap, which needs the session pipeline and cannot import an executable.
+  `Sources/Listnr/` became `Sources/ListnrCore/`; `Sources/listnr/main.swift` is
+  now the whole executable. The library's public API is deliberately one symbol,
+  the `Listnr` root command: everything else stays `internal`, which `@testable`
+  still reaches, so nothing had to be made `public` to keep the tests working.
 - **Non-English defaults no longer point at the full-precision 1.5 GB turbo.**
   Every non-English language used to resolve to the largest and slowest model in
   the registry, which could not keep pace with a live conversation — and the lane

@@ -1,5 +1,5 @@
 import XCTest
-@testable import listnr
+@testable import ListnrCore
 
 final class WAVWriterTests: XCTestCase {
     private func readLE32(_ data: Data, _ offset: Int) -> UInt32 {

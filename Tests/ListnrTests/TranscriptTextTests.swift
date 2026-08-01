@@ -1,5 +1,5 @@
 import XCTest
-@testable import listnr
+@testable import ListnrCore
 
 /// The text rules live in one dependency-free place so they can be pinned
 /// down exactly. The guiding principle: text alone cannot tell you whether

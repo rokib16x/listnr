@@ -1,5 +1,5 @@
 import XCTest
-@testable import listnr
+@testable import ListnrCore
 
 final class TranscriptMergerTests: XCTestCase {
     private func line(_ speaker: String, _ t: Double, _ text: String = "x") -> TranscriptLine {

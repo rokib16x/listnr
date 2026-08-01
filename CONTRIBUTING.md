@@ -59,6 +59,24 @@ Debug Swift is far slower and will mislead you:
 swift build -c release
 ```
 
+## Project layout
+
+The package is split so the logic is importable:
+
+| Target | Path | What lives there |
+|---|---|---|
+| `ListnrCore` (library) | `Sources/ListnrCore/` | Everything: capture, VAD, transcription, diarization, the CLI commands |
+| `listnr` (executable) | `Sources/listnr/` | One line, `Listnr.main()` |
+| `ListnrTests` | `Tests/ListnrTests/` | Unit tests, via `@testable import ListnrCore` |
+
+Put new code in `ListnrCore`. The executable target exists only to have an entry
+point; anything placed there is unreachable from the tests, and unreachable from
+the menubar app that will import this library later.
+
+`ListnrCore`'s public API is deliberately one symbol, the `Listnr` root command.
+Everything else is `internal`, which `@testable` still reaches. Do not make
+things `public` to satisfy a test.
+
 ## Tests
 
 `Tests/ListnrTests` covers the pure logic with no audio hardware required, and
@@ -102,7 +120,8 @@ Check your work before opening a PR:
 swift build -Xswiftc -strict-concurrency=complete
 ```
 
-As of the latest commit this reports **no** warnings in `Sources/Listnr`.
+As of the latest commit this reports **no** warnings in `Sources/`. CI enforces
+that the count stays at zero.
 **Do not add any**, and please do not silence one with `@unchecked Sendable`
 or `nonisolated(unsafe)` unless you can explain in the PR why the access is
 genuinely safe. CI reports the count on every push.

@@ -1,5 +1,5 @@
 import XCTest
-@testable import listnr
+@testable import ListnrCore
 
 /// Relaxing the confidence gate for non-Latin scripts (see `DecodeTuningTests`)
 /// buys back real speech, but it also lets more degenerate output through. This

@@ -1,5 +1,5 @@
 import XCTest
-@testable import listnr
+@testable import ListnrCore
 
 /// Whisper's confidence signals are not comparable across writing systems, so
 /// the acceptance gate is keyed on script. These tests pin the two facts that

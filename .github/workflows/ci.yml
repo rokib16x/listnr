@@ -46,15 +46,12 @@ jobs:
       - name: Build
         run: swift build -c ${{ matrix.configuration }}
 
-      # `swift test` fails outright when no test target exists, so this stays
-      # conditional until Tests/ lands. Remove the guard once it does.
       - name: Test
-        run: |
-          if [ -d Tests ]; then
-            swift test -c ${{ matrix.configuration }}
-          else
-            echo "::warning title=No tests::No Tests/ directory yet, see CONTRIBUTING.md 'Good first issues'."
-          fi
+        run: swift test -c ${{ matrix.configuration }}
+
+      - name: Check version consistency
+        if: matrix.configuration == 'release'
+        run: ./scripts/check-version.sh
 
       - name: Smoke-check the CLI
         # Subcommands that touch neither audio hardware nor permissions, so they
@@ -68,7 +65,7 @@ jobs:
   concurrency-check:
     name: Strict concurrency
     runs-on: macos-15
-    # The diagnostic count in Sources/Listnr reached zero in 0.1.1-beta. This
+    # The diagnostic count in Sources/ reached zero in 0.1.1-beta. This
     # job now enforces it: any new strict-concurrency warning fails the build.
 
     steps:
@@ -77,14 +74,14 @@ jobs:
       - name: Build with complete concurrency checking
         run: swift build -Xswiftc -strict-concurrency=complete 2>&1 | tee build.log
 
-      # Dependency warnings are not ours; report only Sources/Listnr.
+      # Dependency warnings are not ours; report only our own sources.
       - name: Summarise diagnostics in Listnr sources
         run: |
-          grep -E "Sources/Listnr/.*(warning|error):" build.log \
-            | sed 's|.*/Sources/Listnr/||' | sort -u > diagnostics.txt || true
+          grep -E "Sources/(ListnrCore|listnr)/.*(warning|error):" build.log \
+            | sed -E 's#.*/Sources/(ListnrCore|listnr)/##' | sort -u > diagnostics.txt || true
           count=$(wc -l < diagnostics.txt | tr -d ' ')
           {
-            echo "### Strict-concurrency diagnostics in \`Sources/Listnr\`: **$count**"
+            echo "### Strict-concurrency diagnostics in \`Sources/\`: **$count**"
             echo
             if [ "$count" -gt 0 ]; then
               echo '```'
@@ -97,6 +94,6 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
           if [ "$count" -gt 0 ]; then
-            echo "::error title=Strict concurrency::$count new diagnostic(s) in Sources/Listnr; the count must stay at zero."
+            echo "::error title=Strict concurrency::$count new diagnostic(s) in Sources/; the count must stay at zero."
             exit 1
           fi

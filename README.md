@@ -138,7 +138,7 @@ Two things follow from that. Switching from Terminal to iTerm means granting the
 
 Both permissions are required to start: there is no microphone-only mode today, because a meeting transcript without the other side is not one. If you only want to test your own voice, grant both anyway; Lane B simply stays silent.
 
-The Screen Recording permission is how macOS gates system audio capture through ScreenCaptureKit. Listnr asks for a 2x2 pixel video stream that it never reads, purely because the API insists on one. **No screen content is captured, stored, or transmitted.** You can check that yourself in [`Sources/Listnr/Capture/SystemAudioCapture.swift`](Sources/Listnr/Capture/SystemAudioCapture.swift).
+The Screen Recording permission is how macOS gates system audio capture through ScreenCaptureKit. Listnr asks for a 2x2 pixel video stream that it never reads, purely because the API insists on one. **No screen content is captured, stored, or transmitted.** You can check that yourself in [`Sources/ListnrCore/Capture/SystemAudioCapture.swift`](Sources/ListnrCore/Capture/SystemAudioCapture.swift).
 
 ---
 

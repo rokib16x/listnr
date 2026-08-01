@@ -1,5 +1,5 @@
 import XCTest
-@testable import listnr
+@testable import ListnrCore
 
 /// The per-segment acceptance gate. The no-speech and log-probability tests
 /// combine with AND (matching the reference Whisper implementation); the

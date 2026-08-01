@@ -1,5 +1,5 @@
 import XCTest
-@testable import listnr
+@testable import ListnrCore
 
 /// Drives the per-lane pipeline (audio → VAD → ASR → lines) with a fake
 /// transcriber, so the ordering and teardown guarantees are tested without

@@ -1,5 +1,5 @@
 import XCTest
-@testable import listnr
+@testable import ListnrCore
 
 final class SessionOptionsTests: XCTestCase {
 

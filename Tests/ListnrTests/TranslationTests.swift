@@ -1,5 +1,5 @@
 import XCTest
-@testable import listnr
+@testable import ListnrCore
 
 /// Whisper's `translate` task turns any supported language into English. The
 /// hazard it brings is specific and quiet: the `large-v3-turbo` builds were
