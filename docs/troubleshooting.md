@@ -1,0 +1,46 @@
+# Troubleshooting
+
+Everything below writes to **stderr**, so you will see it even when you redirect
+the transcript to a file.
+
+## Nothing appears for a non-English language
+
+Look for this line:
+
+```text
+! dropped 3 low-confidence segment(s) [lang=bn, script=indic]
+```
+
+Whisper heard you and the confidence gate rejected the result. If it fires on speech you know was clear, the thresholds are still too tight for your audio — [open an issue](https://github.com/rokib16x/listnr/issues/new/choose) with the line, the language, and the model. `/model whisper-large-v2` usually clears it, because a better model scores higher.
+
+If there is no such line and the level meter shows `mic=0.000`, it is the microphone, not the transcription. Check System Settings → Sound → Input, and run `listnr doctor`.
+
+## Words go missing in the middle of a conversation
+
+```text
+! You: dropped 12 audio buffer(s) and 4 speech segment(s), transcription could not keep up. Try a smaller model.
+```
+
+The model cannot transcribe in real time on your machine, so the pipeline discarded audio rather than growing without bound. Move **down** the [model table](models.md#models): `whisper-large-v2` → `whisper-large-v3-turbo-fast` → `whisper-small`. This is why the non-English defaults are not the largest models.
+
+## The transcript is gibberish, or repeats itself
+
+Usually one of three things:
+
+1. **`/lang auto` guessed wrong.** It commits to one language per session, so a bad guess affects everything after it. Check the `detected language:` line, and name the language instead.
+2. **The model is too small for the language.** `whisper-tiny` and `whisper-base` produce confident nonsense on Indic languages. Move up the [model table](models.md#models).
+3. **A decoder loop.** Whisper sometimes repeats a phrase indefinitely. Listnr detects and drops these, but a line that repeats a phrase two or three times can still get through.
+
+If output is in the *wrong language* while `/translate` is on, you are on a turbo model. Listnr should have prevented that — please report it.
+
+## It is slow to start
+
+The first `/live` for a given model downloads and compiles it for the Neural Engine. That is once per model, and the progress bar shows it. Pre-fetch before a call:
+
+```sh
+listnr models download whisper-large-v2
+```
+
+## `/lang bn` wants a 908 MB download
+
+That is `/translate` being on, which switches to `whisper-large-v2`. Turn it off for a native-language transcript, or use `/model whisper-small` for a 207 MB translation model.

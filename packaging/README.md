@@ -45,11 +45,53 @@ brew install rokib16x/tap/listnr
 
 Three components are required — `brew install rokib16x/listnr` is not valid syntax, Homebrew drops the first component and hunts for a formula named by the last. The alternative, naming the repo `homebrew-listnr`, works but produces the awkward `rokib16x/listnr/listnr` and leaves nowhere to put a cask for the menubar app later.
 
-### One-time setup
+### First time: zero to `brew install`
 
-1. Create a public repo `rokib16x/homebrew-tap`.
-2. Copy [`homebrew/listnr.rb`](homebrew/listnr.rb) to `Formula/listnr.rb` in it.
-3. Fill in `url` and `sha256` from the release.
+Do this once. Steps 1–2 are in *this* repo; steps 3–5 are in the tap repo.
+
+**1. Tag a release here.** The workflow does the rest and prints the checksum you need.
+
+```sh
+# bump Sources/ListnrCore/Version.swift, move the CHANGELOG notes, then:
+swift build -c release
+./scripts/check-version.sh v0.1.2      # refuses if anything disagrees
+git tag v0.1.2 && git push origin v0.1.2
+```
+
+**2. Grab the source checksum** from the finished run's summary (Actions → Release → Summary), the row labelled *Source SHA-256*. It is the checksum of GitHub's auto-generated source tarball, not the binary attached to the release — the formula builds from source. To compute it by hand instead:
+
+```sh
+curl -sL https://github.com/rokib16x/listnr/archive/refs/tags/v0.1.2.tar.gz | shasum -a 256
+```
+
+**3. Create a public repo named `rokib16x/homebrew-tap`.** The `homebrew-` prefix is required and disappears in commands; see [Naming](#naming) above.
+
+**4. Add the formula:**
+
+```sh
+git clone https://github.com/rokib16x/homebrew-tap.git
+cd homebrew-tap && mkdir -p Formula
+curl -sL https://raw.githubusercontent.com/rokib16x/listnr/main/packaging/homebrew/listnr.rb \
+  -o Formula/listnr.rb
+# edit Formula/listnr.rb: set `url` to the v0.1.2 tag and `sha256` to the value from step 2
+```
+
+**5. Test it locally, then push:**
+
+```sh
+brew install --build-from-source ./Formula/listnr.rb
+brew test listnr
+brew audit --strict --new listnr
+git add Formula/listnr.rb && git commit -m "listnr 0.1.2" && git push
+```
+
+Anyone can now run:
+
+```sh
+brew install rokib16x/tap/listnr
+```
+
+Finally, delete the "Available from the first tagged release" note from the README's Install section.
 
 ### Per release
 
