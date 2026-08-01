@@ -11,7 +11,9 @@ Speak English, Bangla, Hindi, Spanish, French, German, Japanese, or Chinese — 
 **Requires:** macOS 14 or later on Apple Silicon (M1 or newer). Intel Macs are not supported.
 
 ```sh
-brew install rokib16x/tap/listnr
+brew tap rokib16x/listnr https://github.com/rokib16x/listnr
+brew trust --tap rokib16x/listnr
+brew install listnr
 listnr setup && listnr
 ```
 
@@ -35,7 +37,7 @@ It is a CLI because that is what I needed first. A menubar app is on the roadmap
 
 ## Status: beta
 
-Listnr is at **`0.1.1-beta`**. The core pipeline works and produces transcripts I rely on, but this is early software with one maintainer, and the CLI may change in any `0.x` release.
+Listnr is at **`0.1.2-beta`**. The core pipeline works and produces transcripts I rely on, but this is early software with one maintainer, and the CLI may change in any `0.x` release.
 
 These are all known — please read before filing an issue:
 
@@ -96,11 +98,17 @@ What gets written to disk:
 
 ### Homebrew
 
+This repository is its own tap, so there is no separate `homebrew-listnr` repo:
+
 ```sh
-brew install rokib16x/tap/listnr
+brew tap rokib16x/listnr https://github.com/rokib16x/listnr
+brew trust --tap rokib16x/listnr
+brew install listnr
 ```
 
-> Not live yet — the tap is being set up. Use a pre-built binary or build from source until then.
+Three commands rather than one, for two reasons. `brew tap` needs the explicit URL because its one-argument shorthand assumes a repo named `homebrew-<name>`. And Homebrew 6 refuses to load formulae from third-party taps until you trust them — which applies to any tap, not just this one.
+
+This builds from source, so the first install takes several minutes (it compiles WhisperKit). It installs the binary, a man page, and completions for bash, zsh, and fish.
 
 ### Pre-built binary
 

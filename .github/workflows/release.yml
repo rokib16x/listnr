@@ -128,7 +128,7 @@ jobs:
             echo "| Source SHA-256 (for the formula) | \`${{ steps.source.outputs.sha256 }}\` |"
             echo "| Dry run | ${{ steps.tag.outputs.dry_run }} |"
             echo
-            echo "Update the formula in \`rokib16x/homebrew-tap\` with the source SHA-256 above."
+            echo "Update \`Formula/listnr.rb\` in this repo with the source SHA-256 above."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish the release

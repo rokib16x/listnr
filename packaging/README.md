@@ -35,84 +35,78 @@ Apple Silicon only, so there is one artefact and no universal binary. Listnr can
 
 ## Homebrew tap
 
-### Naming
+**This repository is its own tap.** Homebrew reads formulae from `Formula/` at
+the root of any tapped git repository, so [`Formula/listnr.rb`](../Formula/listnr.rb)
+is all that is needed — there is no separate `homebrew-listnr` repo to create or
+keep in sync.
 
-The tap repo must be called `homebrew-<something>`; the prefix disappears in commands. Using **`homebrew-tap`** gives:
-
-```sh
-brew install rokib16x/tap/listnr
-```
-
-Three components are required — `brew install rokib16x/listnr` is not valid syntax, Homebrew drops the first component and hunts for a formula named by the last. The alternative, naming the repo `homebrew-listnr`, works but produces the awkward `rokib16x/listnr/listnr` and leaves nowhere to put a cask for the menubar app later.
-
-### First time: zero to `brew install`
-
-Do this once. Steps 1–2 are in *this* repo; steps 3–5 are in the tap repo.
-
-**1. Tag a release here.** The workflow does the rest and prints the checksum you need.
+Users install with:
 
 ```sh
-# bump Sources/ListnrCore/Version.swift, move the CHANGELOG notes, then:
-swift build -c release
-./scripts/check-version.sh v0.1.2      # refuses if anything disagrees
-git tag v0.1.2 && git push origin v0.1.2
+brew tap rokib16x/listnr https://github.com/rokib16x/listnr
+brew trust --tap rokib16x/listnr
+brew install listnr
 ```
 
-**2. Grab the source checksum** from the finished run's summary (Actions → Release → Summary), the row labelled *Source SHA-256*. It is the checksum of GitHub's auto-generated source tarball, not the binary attached to the release — the formula builds from source. To compute it by hand instead:
+### Why three commands instead of one
 
-```sh
-curl -sL https://github.com/rokib16x/listnr/archive/refs/tags/v0.1.2.tar.gz | shasum -a 256
-```
+- **The explicit URL is required.** `brew tap user/name` on its own assumes the
+  repo is called `homebrew-<name>`; this one is called `listnr`. The
+  two-argument form makes no such assumption. That also means
+  `brew install rokib16x/listnr/listnr` cannot auto-tap on a clean machine — it
+  works only after the tap exists.
+- **`brew trust` is a Homebrew 6 requirement** for every third-party tap, not
+  something specific to this one. Without it, loading the formula fails with
+  "Refusing to load formula ... from untrusted tap".
 
-**3. Create a public repo named `rokib16x/homebrew-tap`.** The `homebrew-` prefix is required and disappears in commands; see [Naming](#naming) above.
-
-**4. Add the formula:**
-
-```sh
-git clone https://github.com/rokib16x/homebrew-tap.git
-cd homebrew-tap && mkdir -p Formula
-curl -sL https://raw.githubusercontent.com/rokib16x/listnr/main/packaging/homebrew/listnr.rb \
-  -o Formula/listnr.rb
-# edit Formula/listnr.rb: set `url` to the v0.1.2 tag and `sha256` to the value from step 2
-```
-
-**5. Test it locally, then push:**
-
-```sh
-brew install --build-from-source ./Formula/listnr.rb
-brew test listnr
-brew audit --strict --new listnr
-git add Formula/listnr.rb && git commit -m "listnr 0.1.2" && git push
-```
-
-Anyone can now run:
-
-```sh
-brew install rokib16x/tap/listnr
-```
-
-Finally, delete the "Available from the first tagged release" note from the README's Install section.
+A separate `rokib16x/homebrew-tap` repo would collapse this to a single
+`brew install rokib16x/tap/listnr` (the trust step still applies). The trade is
+a second repository, a second release step, and a cross-repo token if the
+formula bump is ever automated. One repo was judged the better trade; the
+decision is reversible by moving `Formula/listnr.rb` into a new tap repo.
 
 ### Per release
 
-Update two lines in `Formula/listnr.rb`:
+Update two lines in [`Formula/listnr.rb`](../Formula/listnr.rb):
 
 ```ruby
 url "https://github.com/rokib16x/listnr/archive/refs/tags/vX.Y.Z.tar.gz"
 sha256 "..."   # the "Source SHA-256" from the release workflow summary
 ```
 
-That is the checksum of GitHub's generated **source** tarball, not the binary one attached to the release — the formula builds from source.
-
-Verify before pushing:
+That is the checksum of GitHub's generated **source** tarball, not the binary
+attached to the release — the formula builds from source. To compute it by hand:
 
 ```sh
-brew install --build-from-source ./Formula/listnr.rb
-brew test listnr
-brew audit --strict --new listnr
+curl -sL https://github.com/rokib16x/listnr/archive/refs/tags/vX.Y.Z.tar.gz | shasum -a 256
 ```
 
-Keep [`homebrew/listnr.rb`](homebrew/listnr.rb) in this repo in sync; it is the reviewable copy.
+Verify before pushing, from a clone of this repo:
+
+```sh
+brew untap rokib16x/listnr 2>/dev/null
+brew tap rokib16x/listnr https://github.com/rokib16x/listnr
+brew trust --tap rokib16x/listnr
+brew audit --strict --formula rokib16x/listnr/listnr
+brew install rokib16x/listnr/listnr
+brew test rokib16x/listnr/listnr
+```
+
+`brew audit --strict` is worth running every time; it caught three style
+violations and the `depends_on` ordering rule on the first pass.
+
+### Two things that only fail inside Homebrew's sandbox
+
+Both are fixed in the formula and commented there, but they are the kind of
+thing that will bite again if the man-page step is ever rewritten:
+
+- SwiftPM compiles the package manifest under `sandbox-exec`, which cannot nest
+  inside the sandbox Homebrew already applies. Without `--disable-sandbox` the
+  step dies with `sandbox_apply: Operation not permitted`. It still needs
+  `--allow-writing-to-directory` as well, and the two bind to different
+  subcommands, so placement matters.
+- `generate-manual` does not create its own output directory and exits 64 if it
+  is missing.
 
 ### Why build from source
 
