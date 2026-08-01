@@ -144,7 +144,8 @@ final class LiveSessionRunner: @unchecked Sendable {
             let t = WhisperKitTranscriber(
                 model: model,
                 language: langCode,
-                detectLanguage: options.language == .auto
+                detectLanguage: options.language == .auto,
+                translate: options.translate
             )
             sharedTranscriber = t
             try await t.warmUp()
@@ -171,8 +172,9 @@ final class LiveSessionRunner: @unchecked Sendable {
             default: return options.language.rawValue
             }
         }()
+        let taskNote = options.translate ? " · translating → English" : ""
         FileHandle.standardError.write(Data(
-            "● live · \(durationLabel) · model=\(model.id) · lang=\(langNote) · speakers≈\(options.remoteSpeakers)\n".utf8
+            "● live · \(durationLabel) · model=\(model.id) · lang=\(langNote)\(taskNote) · speakers≈\(options.remoteSpeakers)\n".utf8
         ))
         // The stop/cancel key hints differ per mode (shell vs one-shot), so the
         // caller supplies them.

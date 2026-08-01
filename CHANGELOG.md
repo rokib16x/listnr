@@ -10,6 +10,30 @@ While the version is `0.x`, the CLI surface may change in any minor release.
 
 ### Fixed
 
+- **Non-English transcription dropped correct speech and reported nothing.** The
+  per-segment confidence gate was calibrated on English and applied to every
+  language, but Whisper's confidence signals are not comparable across writing
+  systems. `avgLogProb` averages over tokens, and Whisper's BPE spends several
+  times more tokens per word on Bengali and Devanagari, so correct Bangla scores
+  around −1.2 against a −0.9 floor. `compressionRatio` is inherently higher for
+  Indic and Han text, which is three bytes per character from a small repertoire,
+  so an ordinary sentence lands near 3.0 against a 2.6 ceiling. Segments that
+  failed both were discarded, `transcribe` returned an empty string, and the lane
+  pipeline skipped it with no log line anywhere — the language looked like it
+  simply did not work. Thresholds are now keyed on script class
+  (`DecodeTuning`), and a dropped-segment count is reported instead of hidden.
+- **`/lang auto` re-detected the language on every clip.** Detection ran per
+  segment, so consecutive utterances from one continuous conversation could be
+  decoded as different languages — the mechanism behind auto mode's gibberish.
+  Detection now runs once, locks for the session, and retunes the thresholds to
+  the detected script.
+- **`--language` and `--model` no longer contradict each other in silence.** An
+  English-only model with a non-English language transcribed foreign speech
+  *into English words*, which reads as a bad transcript rather than as a
+  misconfiguration. Both the shell and `listnr start` now warn.
+- The `models download` subcommand mutated a captured `var` from inside a
+  `Task`, the one remaining strict-concurrency diagnostic in `Sources/Listnr`
+  and an error under the Swift 6 language mode.
 - **Every utterance no longer starts with a duplicated 30 ms of audio.** When
   the segmenter triggered, the pre-roll ring already contained the triggering
   frame, and that frame was then appended a second time. The onset stuttered in
@@ -20,12 +44,57 @@ While the version is `0.x`, the CLI surface may change in any minor release.
 
 ### Added
 
+- **`/translate` and `--translate`: speak any supported language, get an English
+  transcript.** This is Whisper's own `translate` task, so it costs no second
+  model and no extra decode pass. Whisper only translates *into* English; there
+  is no other target, and English input is a no-op that Listnr now points out.
+  Each line is English only — the native wording is not kept, so leave it off if
+  the original is the record you need.
+  - Models now carry a `supportsTranslation` capability, because the pairing that
+    matters fails silently. OpenAI fine-tuned the `large-v3-turbo` builds for
+    transcription only, and they "return the original language even if
+    `--task translate` is specified" — and one of those builds is Listnr's
+    transcription default for `bn`/`hi`/`ja`/`zh`. Toggling translation now
+    re-derives the model instead of leaving one that ignores the request, naming
+    an incapable model explicitly is refused before the session starts rather
+    than discovered at the end of it, and `listnr models list` marks the capable
+    ones with `→en`.
+  - The confidence gate splits its two signals apart when translating. The
+    compression ratio is measured on the *output*, which is English, so it
+    reverts to the Latin ceiling — keeping the relaxed Indic one would have
+    admitted exactly the repetition loops it was widened past. The
+    log-probability floor describes how hard the *input* was and stays where the
+    source script put it.
+- **Six more models**, so non-English is a ladder rather than a single 1.5 GB
+  option: `whisper-tiny`, `whisper-base`, `whisper-small` and `whisper-medium`
+  multilingual builds, `whisper-large-v2` as the accuracy pick for Bangla and
+  Hindi, and `whisper-large-v3-turbo-fast` as a quantized build of the model that
+  used to be the only choice. Sizes in the registry are now the measured on-disk
+  totals.
+- A script-independent repetition guard. Relaxing the non-Latin confidence gates
+  buys back real speech but would also admit more degenerate output, so
+  `TranscriptText.isRepetitionLoop` rejects decoder loops by the shape of the
+  text — a word four times over, or a phrase three times back to back — with a
+  character-level pass for Han, Kana, and Hangul, which are not word-spaced.
+- `Locked<T>`, one audited generic replacing the lock-plus-`@unchecked Sendable`
+  shape that had been hand-written five times.
 - Tests for the stop-versus-cancel rule (extracted to `SessionStopState`), the
   stdin reader's buffering and live hand-off, and `LanguageMode` /
-  `SessionOptions` / `ModelRegistry`. The suite is now 76 tests.
+  `SessionOptions` / `ModelRegistry`. With the script-tuning, repetition-guard,
+  and model-compatibility tests the suite is now 115 tests.
 
 ### Changed
 
+- **Non-English defaults no longer point at the full-precision 1.5 GB turbo.**
+  Every non-English language used to resolve to the largest and slowest model in
+  the registry, which could not keep pace with a live conversation — and the lane
+  pipeline's bounded queue drops what it cannot transcribe in time, so the cost
+  was whole missing utterances. `bn`/`hi`/`ja`/`zh`/`auto` now default to the
+  quantized turbo at 615 MB, and `es`/`fr`/`de` to `whisper-medium`.
+  `whisper-large-v2` remains available via `/model` for accuracy over speed.
+- `resolveModel()` delegates to `LanguageMode.preferredModelID` instead of
+  repeating the mapping, so the model named in the session header is always the
+  one that runs.
 - The stop/cancel decision moved out of `LiveSessionRunner` into
   `SessionStopState` so the rule that broke in `0.1.0-beta` is covered by
   tests; behaviour is unchanged.

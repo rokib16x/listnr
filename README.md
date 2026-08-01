@@ -179,12 +179,57 @@ a timestamped filename.
 ### Language
 
 ```text
-listnr> /lang en           # English (whisper-base.en by default)
-listnr> /lang auto         # multilingual (whisper-large-v3-turbo)
-listnr> /lang bn           # Bangla hint plus the multilingual model
+listnr> /lang en           # English (whisper-base.en, 139 MB)
+listnr> /lang bn           # Bangla  (whisper-large-v3-turbo-fast, 615 MB)
+listnr> /lang auto         # detect once at the start of the session, then lock
 ```
 
-Set the language explicitly rather than using `auto`. Auto-detection is slower and it guesses wrong a lot on short clips. Any non-English language pulls the 1.6 GB turbo model the first time.
+Name the language rather than using `auto`. Detection now runs once per session instead of once per clip, which removed most of auto mode's misbehaviour, but a one-second utterance is still thin evidence and naming the language costs you nothing.
+
+**Non-English accuracy is tunable, and the default is not the most accurate option.** The default aims to keep up with a live conversation, because a model that cannot is worse than a smaller one: the lane pipeline drops segments it cannot transcribe in time, so you lose whole utterances rather than getting slightly rougher text. If you would rather spend the time, move up the ladder:
+
+| `/model` | Size | Speed | Notes |
+|---|---|---|---|
+| `whisper-small` | 207 MB | fastest usable | Fine for Spanish/French/German, weak on Bangla |
+| `whisper-large-v3-turbo-fast` | 615 MB | fast | **Default for bn/hi/ja/zh/auto.** Quantized v3-turbo |
+| `whisper-medium` | 1.4 GB | moderate | **Default for es/fr/de** |
+| `whisper-large-v2` | 908 MB | slow | **Most accurate for Bangla and Hindi.** See below |
+
+`whisper-large-v2` rather than a v3 for the accuracy pick is deliberate. `large-v3-turbo` is distilled from thirty-two decoder layers down to four, and that loss lands hardest on the languages with the least training data behind them — which is exactly Bangla and Hindi. v2 is the more reliable of the two there, and its quantized build is smaller than full-precision v3-turbo besides.
+
+Be realistic about the ceiling: Whisper is much weaker on Bangla than on English at every size. English feeling flawless and Bangla feeling rough is partly the models, not only the configuration.
+
+Run `listnr models list` for the full set, including `whisper-tiny` and `whisper-base` multilingual builds that are mostly useful for A/B testing against your own audio.
+
+### Translating to English
+
+Speak Bangla, Hindi, or anything else Whisper supports, and get an English transcript:
+
+```text
+listnr> /translate         # toggle; the transcript comes out in English
+```
+
+```sh
+listnr start --language bn --translate --seconds 60
+```
+
+This uses Whisper's own `translate` task, so there is no second model and no extra pass — but three things are worth knowing.
+
+**It only goes into English.** Whisper cannot translate into any other target. English in, English out is a no-op, and Listnr says so.
+
+**The turbo models cannot do it.** OpenAI fine-tuned `large-v3-turbo` for transcription only, and it "will return the original language even if `--task translate` is specified" — no error, just the wrong language. Since the turbo build is Listnr's *transcription* default for `bn`/`hi`/`ja`/`zh`, turning on `/translate` automatically switches you to `whisper-large-v2`, and naming an incapable model explicitly is refused before the session starts rather than discovered at the end of it. `listnr models list` marks the capable ones with `→en`.
+
+**The original wording is not kept.** Each line is English only. If you need the native transcript as the record, leave `/translate` off.
+
+Translation is a harder task than transcription and degrades faster as models shrink, so the default here favours quality over size — unlike the transcription defaults:
+
+| `/model` | Size | Translation |
+|---|---|---|
+| `whisper-small` | 207 MB | Lightest usable. Rough, but intelligible for Hindi |
+| `whisper-large-v2` | 908 MB | **Default when translating.** Best available |
+| `whisper-tiny`, `whisper-base` | 73 / 139 MB | Not worth running |
+
+There is no 200 MB model that turns Bangla speech into clean English. `whisper-small` will be noticeably rougher than `whisper-base.en` transcribing English is polished.
 
 ### Other commands
 
@@ -193,6 +238,7 @@ listnr> /speakers 2        # how many remote people to expect (1-6)
 listnr> /model whisper-small.en
 listnr> /dump              # toggle WAV dumps to ~/Documents/Listnr/debug
 listnr> /diarize           # toggle SpeakerKit
+listnr> /translate         # speak any language, transcript comes out English
 listnr> /status
 listnr> /help
 listnr> quit
@@ -209,7 +255,7 @@ listnr models list
 
 The finished transcript goes to **stdout**. Progress, level meters, and diagnostics go to **stderr**, so you can redirect just the transcript. Structured `--json` output is planned.
 
-> Known gap: `--language` and `--model` can silently contradict each other. If you pick an English-only model together with a non-English language, the language gets ignored without warning. Set one or the other for now.
+If `--language` and `--model` contradict each other — an English-only model together with a non-English language, for instance — Listnr now says so before the session starts instead of quietly transcribing Bangla into English words.
 
 ---
 

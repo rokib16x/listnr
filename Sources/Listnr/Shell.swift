@@ -122,10 +122,12 @@ struct Shell: ParsableCommand {
                 print("lang → \(mode.rawValue)  (model \(options.modelID ?? "auto"))")
                 switch mode {
                 case .auto:
-                    print("  tip: auto-detect is slower/less reliable on short clips.")
-                    print("       for Bangla use `/lang bn` · for Hindi `/lang hi`")
+                    print("  tip: detection now runs once per session and then locks,")
+                    print("       but naming the language outright is still better:")
+                    print("       `/lang bn` for Bangla · `/lang hi` for Hindi")
                 case .bn, .hi:
-                    print("  tip: speak clearly; first /live may already have turbo cached")
+                    print("  tip: if words are missing or garbled, `/model whisper-large-v2`")
+                    print("       is slower but the most accurate option for Bangla/Hindi.")
                 case .en:
                     break
                 default:
@@ -151,6 +153,9 @@ struct Shell: ParsableCommand {
                 }
                 options.modelID = id
                 print("model → \(id)")
+                if let warning = options.compatibilityWarning {
+                    print("  ! \(warning)")
+                }
 
             case "/dump", "dump":
                 options.dumpWav.toggle()
@@ -159,6 +164,21 @@ struct Shell: ParsableCommand {
             case "/diarize", "diarize":
                 options.diarize.toggle()
                 print("diarize → \(options.diarize ? "on" : "off")")
+
+            case "/translate", "translate":
+                options.applyTranslate(!options.translate)
+                print("translate → \(options.translate ? "on (output in English)" : "off")")
+                // The model changes with the flag, so say which one will run.
+                if let model = try? options.resolveModel() {
+                    print("  model → \(model.id) (\(model.sizeMB) MB)")
+                }
+                if options.translate {
+                    print("  Whisper only translates into English; the original wording is not kept.")
+                    print("  lighter option: /model whisper-small (207 MB, rougher)")
+                }
+                if let warning = options.compatibilityWarning {
+                    print("  ! \(warning)")
+                }
 
             case "/live", "live":
                 if state.runner != nil {
@@ -238,12 +258,15 @@ struct Shell: ParsableCommand {
               /live 30           listen for 30 seconds then report
               /live 300          listen for 300 seconds then report
               /stop | q          stop a live session (type while live + Enter)
-              /lang en|auto|bn|hi   language. use bn/hi explicitly for Bangla/Hindi
-                                    (auto is slower and often mis-detects short speech)
+              /lang en|auto|bn|hi   language. naming it beats auto-detect
               /speakers N        remote speaker hint (1-6)
-              /model <id>        whisper-base.en | whisper-small.en | whisper-large-v3-turbo
+              /model <id>        see `listnr models list`. English: whisper-base.en
+                                 Other languages, fastest → most accurate:
+                                   whisper-small · whisper-large-v3-turbo-fast
+                                   whisper-medium · whisper-large-v2
               /dump              toggle WAV dump to ~/Documents/Listnr/debug
               /diarize           toggle SpeakerKit on Lane B
+              /translate         speak any language, transcript comes out English
               /status            show current options
               /help              this help
               quit | exit        leave the shell (when not live)
@@ -257,7 +280,7 @@ struct Shell: ParsableCommand {
             """
             status:
               lang=\(options.language.rawValue)  model=\(model)  speakers=\(options.remoteSpeakers)
-              diarize=\(options.diarize)  dump-wav=\(options.dumpWav)
+              diarize=\(options.diarize)  dump-wav=\(options.dumpWav)  translate=\(options.translate)
             """
         )
     }

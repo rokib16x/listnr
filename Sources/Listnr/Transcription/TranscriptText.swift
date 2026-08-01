@@ -112,6 +112,95 @@ enum TranscriptText {
         if captionArtifacts.contains(normalised) { return true }
         // A whole segment that is only a stage direction, brackets already gone.
         if annotationKeywords.contains(normalised) { return true }
+        if isRepetitionLoop(trimmed) { return true }
+
+        return false
+    }
+
+    /// True when the text is a decoder loop rather than speech.
+    ///
+    /// The non-Latin confidence gates are deliberately permissive (see
+    /// `DecodeTuning`), because the English ones were rejecting correct Bangla
+    /// and Hindi outright. This is the counterweight for what that lets through.
+    ///
+    /// It reads the *shape* of the output rather than matching a keyword list, so
+    /// it works the same in every language, including the ones nobody has written
+    /// a keyword list for. The two thresholds are set where emphasis stops and
+    /// degeneracy starts: three repeats of a word is a person insisting, four is
+    /// the decoder stuck. Two occurrences of a phrase is a callback, three is a
+    /// loop.
+    static func isRepetitionLoop(_ text: String) -> Bool {
+        let words = text
+            .split(whereSeparator: { $0.isWhitespace })
+            .map { normalisedToken(String($0)) }
+            .filter { !$0.isEmpty }
+
+        if hasDegenerateRun(words, sameTokenLimit: 4, gramRepeatLimit: 3) { return true }
+
+        // Han, Kana, and Hangul are not word-spaced, so the whole utterance
+        // arrives as one or two tokens and the pass above cannot see the loop.
+        // Character granularity is the only view that can, and the limits go up
+        // to match: characters repeat far more readily than words do.
+        if words.count <= 2 {
+            let characters = text
+                .filter { !$0.isWhitespace && !$0.isPunctuation && !$0.isSymbol }
+                .map(String.init)
+            if characters.count >= 8,
+               hasDegenerateRun(characters, sameTokenLimit: 6, gramRepeatLimit: 4) {
+                return true
+            }
+        }
+
+        return false
+    }
+
+    // MARK: - Repetition helpers
+
+    /// Lowercase and shed surrounding punctuation, so "YES!" and "yes," are the
+    /// same token for repetition purposes.
+    private static func normalisedToken(_ token: String) -> String {
+        token
+            .lowercased()
+            .trimmingCharacters(in: .punctuationCharacters.union(.symbols))
+    }
+
+    /// True when `tokens` contains either one token repeated `sameTokenLimit`
+    /// times in a row, or an n-gram (n of 2...4) repeated `gramRepeatLimit` times
+    /// back to back. Only *consecutive* repetition counts: a word recurring
+    /// throughout a sentence is normal speech, a word recurring immediately is
+    /// not.
+    private static func hasDegenerateRun(
+        _ tokens: [String],
+        sameTokenLimit: Int,
+        gramRepeatLimit: Int
+    ) -> Bool {
+        guard tokens.count >= 2 else { return false }
+
+        var run = 1
+        for index in 1..<tokens.count {
+            if tokens[index] == tokens[index - 1] {
+                run += 1
+                if run >= sameTokenLimit { return true }
+            } else {
+                run = 1
+            }
+        }
+
+        for gramLength in 2...4 {
+            let span = gramLength * gramRepeatLimit
+            guard tokens.count >= span else { continue }
+            for start in 0...(tokens.count - span) {
+                let gram = Array(tokens[start ..< start + gramLength])
+                var repeats = 1
+                var cursor = start + gramLength
+                while cursor + gramLength <= tokens.count,
+                      Array(tokens[cursor ..< cursor + gramLength]) == gram {
+                    repeats += 1
+                    if repeats >= gramRepeatLimit { return true }
+                    cursor += gramLength
+                }
+            }
+        }
 
         return false
     }

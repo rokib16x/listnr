@@ -36,6 +36,9 @@ struct Start: ParsableCommand {
     @Flag(name: .long, help: "Skip SpeakerKit diarization (keep a single Others label).")
     var noDiarize: Bool = false
 
+    @Flag(name: .long, help: "Translate speech to English instead of transcribing it verbatim.")
+    var translate: Bool = false
+
     @Option(name: .long, help: "Hint for remote speaker count on Lane B.")
     var speakers: Int?
 
@@ -62,17 +65,22 @@ struct Start: ParsableCommand {
         options.dumpWav = dumpWav || config.dumpWav
         options.transcribe = !noTranscribe
         options.diarize = !noDiarize
+        options.translate = translate
         options.seconds = seconds
         options.modelID = model
 
         if let mode = LanguageMode.parse(language) {
             options.language = mode
             if model == nil {
-                options.modelID = mode.preferredModelID(current: nil)
+                options.modelID = mode.preferredModelID(current: nil, translating: translate)
             }
         } else {
             FileHandle.standardError.write(Data("unknown --language \(language)\n".utf8))
             throw ExitCode(1)
+        }
+
+        if let warning = options.compatibilityWarning {
+            FileHandle.standardError.write(Data("! \(warning)\n".utf8))
         }
 
         options.controlsHint = "Ctrl+C to finish · Ctrl+C twice to force quit"
@@ -129,12 +137,24 @@ struct Models: ParsableCommand {
 
     struct List: ParsableCommand {
         func run() throws {
+            // Wide enough for the longest registered id; `padding(toLength:)`
+            // truncates rather than grows, so a short pad hides the tail.
+            let width = ModelRegistry.shared.map(\.id.count).max() ?? 26
             for m in ModelRegistry.shared {
                 let star = m.recommended ? "★" : " "
-                let id = m.id.padding(toLength: 26, withPad: " ", startingAt: 0)
-                let langs = m.languages.joined(separator: ",")
-                print("\(star) \(id) \(String(format: "%5d MB", m.sizeMB))  [\(langs)]  \(m.displayName)")
+                let id = m.id.padding(toLength: width, withPad: " ", startingAt: 0)
+                // Pad outside the brackets, so "[en]" and "[multi]" still line up
+                // the columns that follow without looking like "[en   ]".
+                let langs = "[\(m.languages.joined(separator: ","))]"
+                    .padding(toLength: 7, withPad: " ", startingAt: 0)
+                // Worth its own column: the turbo builds look like the obvious
+                // pick for every non-English job and are the one family that
+                // cannot translate at all.
+                let translate = m.supportsTranslation ? "→en" : "   "
+                print("\(star) \(id) \(String(format: "%5d MB", m.sizeMB))  \(langs) \(translate)  \(m.displayName)")
             }
+            print("")
+            print("★ = default for English · →en = can translate speech to English (--translate)")
         }
     }
 
@@ -148,15 +168,17 @@ struct Models: ParsableCommand {
             }
             let t = WhisperKitTranscriber(model: m)
             let sem = DispatchSemaphore(value: 0)
-            var err: Error?
+            // A locked box rather than a captured `var`: mutating captured state
+            // from inside the task is a data race under the Swift 6 language mode.
+            let failure = Locked<Error?>(nil)
             Task {
-                do { try await t.warmUp() } catch { err = error }
+                do { try await t.warmUp() } catch { failure.value = error }
                 sem.signal()
             }
             while sem.wait(timeout: .now() + 0.05) == .timedOut {
                 RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.05))
             }
-            if let err { throw err }
+            if let err = failure.value { throw err }
         }
     }
 }
