@@ -46,12 +46,19 @@ class Listnr < Formula
     # completions for whatever shell the builder happened to be running.
     generate_completions_from_executable(bin/"listnr", "--generate-completion-script")
 
-    # `--allow-writing-to-directory` rather than `--disable-sandbox`: the flag
-    # belongs to the `plugin` subcommand, and putting `--disable-sandbox` ahead
-    # of `plugin` makes the plugin print usage instead of running. The tool name
-    # is deliberately omitted — generate-manual auto-detects the executable and
-    # passing it explicitly also fails.
-    system "swift", "package", "plugin",
+    # Both sandbox flags are required, for different sandboxes:
+    #   --disable-sandbox            SwiftPM compiles the manifest under
+    #                                sandbox-exec, which cannot nest inside
+    #                                Homebrew's own build sandbox — without this
+    #                                the step dies with "sandbox_apply:
+    #                                Operation not permitted".
+    #   --allow-writing-to-directory SwiftPM's plugin sandbox, which otherwise
+    #                                refuses to write outside the package.
+    # Order matters: --disable-sandbox is a `swift package` option and must come
+    # before `plugin`, while --allow-writing-to-directory belongs to `plugin`.
+    # The tool name is deliberately omitted — generate-manual auto-detects the
+    # executable, and naming it explicitly makes it print usage and exit.
+    system "swift", "package", "--disable-sandbox", "plugin",
            "--allow-writing-to-directory", buildpath/"manual",
            "generate-manual", "--output-directory", buildpath/"manual"
     man1.install Dir["manual/*.1"]
