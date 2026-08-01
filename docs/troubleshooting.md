@@ -15,6 +15,32 @@ Whisper heard you and the confidence gate rejected the result. If it fires on sp
 
 If there is no such line and the level meter shows `mic=0.000`, it is the microphone, not the transcription. Check System Settings → Sound → Input, and run `listnr doctor`.
 
+## The transcript has gaps — minutes of speech missing
+
+Look at the level meter while you talk:
+
+```text
+  levels  mic=0.017  sys=0.000
+```
+
+Speech has to reach **0.018** at `normal` sensitivity before a finished segment
+is kept. A built-in MacBook microphone at default input volume often peaks around
+0.017, which is under the bar — so audio is captured, never transcribed, and the
+transcript simply has holes in it. Listnr now says so ~20 s in:
+
+```text
+! mic peaked at 0.017 but speech needs 0.018 — most of your voice is being discarded.
+```
+
+Two fixes, either works:
+
+1. **Raise the input volume** — System Settings → Sound → Input, drag the slider up.
+2. **Lower the bar** — `/sensitivity high` halves every threshold, or
+   `listnr start --sensitivity high`.
+
+Use `low` for the opposite problem: a hot microphone where keyboard noise and
+fans get transcribed as words.
+
 ## Words go missing in the middle of a conversation
 
 ```text

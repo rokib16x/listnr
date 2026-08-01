@@ -151,9 +151,18 @@ final class LiveSessionRunner: @unchecked Sendable {
             try await t.warmUp()
             try Task.checkCancellation()
             if shouldStop { throw CancellationError() }
-            // Stricter thresholds on the system lane; silence there was hallucinating “Thank you”.
-            youLane = LaneTranscriber(speakerLabel: "You", transcriber: t, speechThreshold: 0.014, minSegmentRMS: 0.018)
-            othersLane = LaneTranscriber(speakerLabel: "Others", transcriber: t, speechThreshold: 0.022, minSegmentRMS: 0.025)
+            // Scaled by /sensitivity; see MicSensitivity for why absolute
+            // thresholds cannot suit every microphone.
+            let you = LaneTuning.you(options.sensitivity)
+            let others = LaneTuning.others(options.sensitivity)
+            youLane = LaneTranscriber(
+                speakerLabel: "You", transcriber: t,
+                speechThreshold: you.speechThreshold, minSegmentRMS: you.minSegmentRMS
+            )
+            othersLane = LaneTranscriber(
+                speakerLabel: "Others", transcriber: t,
+                speechThreshold: others.speechThreshold, minSegmentRMS: others.minSegmentRMS
+            )
         }
 
         // Whatever path leaves this function, the lane pipelines must be torn
@@ -173,8 +182,9 @@ final class LiveSessionRunner: @unchecked Sendable {
             }
         }()
         let taskNote = options.translate ? " · translating → English" : ""
+        let sensitivityNote = options.sensitivity == .normal ? "" : " · sensitivity=\(options.sensitivity.rawValue)"
         FileHandle.standardError.write(Data(
-            "● live · \(durationLabel) · model=\(model.id) · lang=\(langNote)\(taskNote) · speakers≈\(options.remoteSpeakers)\n".utf8
+            "● live · \(durationLabel) · model=\(model.id) · lang=\(langNote)\(taskNote)\(sensitivityNote) · speakers≈\(options.remoteSpeakers)\n".utf8
         ))
         // The stop/cancel key hints differ per mode (shell vs one-shot), so the
         // caller supplies them.
@@ -189,8 +199,14 @@ final class LiveSessionRunner: @unchecked Sendable {
         var lastMic: Float = 0
         var lastSys: Float = 0
         var micSeen = false
+        // The loudest the microphone ever got, so a mic that is audible but too
+        // quiet to clear the threshold can say so instead of silently producing
+        // a transcript with gaps in it.
+        var micPeak: Float = 0
+        let youThreshold = LaneTuning.you(options.sensitivity).minSegmentRMS
         session.onMicLevel = { level in
             lastMic = level
+            micPeak = max(micPeak, level)
             if level > 0.001 { micSeen = true }
         }
         session.onSystemLevel = { lastSys = $0 }
@@ -217,6 +233,16 @@ final class LiveSessionRunner: @unchecked Sendable {
                 FileHandle.standardError.write(Data(
                     "\n! mic still silent. Check System Settings → Sound → Input, and speak louder\n".utf8
                 ))
+            }
+            // 20 s in: audible, but never loud enough for a segment to survive
+            // the floor. Left unsaid, this looks like a transcription failure.
+            if meterTicks == 40, micSeen, micPeak < youThreshold {
+                let note = String(
+                    format: "\n! mic peaked at %.3f but speech needs %.3f — most of your voice is being discarded.\n"
+                        + "  Raise System Settings → Sound → Input volume, or use /sensitivity high\n",
+                    micPeak, youThreshold
+                )
+                FileHandle.standardError.write(Data(note.utf8))
             }
         }
         meter.resume()

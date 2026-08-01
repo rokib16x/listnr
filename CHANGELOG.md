@@ -8,6 +8,26 @@ While the version is `0.x`, the CLI surface may change in any minor release.
 
 ## [Unreleased]
 
+### Added
+
+- **`/sensitivity` and `--sensitivity`, because a quiet microphone was silently
+  losing most of a session.** The speech-detection thresholds are absolute RMS
+  values, and a real Bangla session on a built-in MacBook microphone peaked at
+  0.017 while the user was talking — under the 0.018 floor that decides whether a
+  finished segment is worth transcribing. Whisper was working; the audio never
+  got to it. The transcript had a fifty-seven second gap and a two-minute gap
+  with nothing on screen to explain either.
+  - `high` halves every threshold, `low` raises them by 60% for a hot mic or a
+    noisy room, and `normal` is exactly what shipped before, so nobody who does
+    not opt in sees a change.
+  - One multiplier scales the whole set, which keeps the relationships that make
+    them work: the system lane stays stricter than the microphone lane, and the
+    segment floor stays above the per-frame speech threshold. Tests assert both
+    invariants at every level.
+  - Around twenty seconds in, a session whose microphone is audible but never
+    clears the floor now says so, with the measured peak and the threshold it
+    needed to beat.
+
 ## [0.1.2-beta] - 2026-08-01
 
 ### Fixed

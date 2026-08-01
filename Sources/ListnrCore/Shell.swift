@@ -165,6 +165,19 @@ struct Shell: ParsableCommand {
                 options.diarize.toggle()
                 print("diarize → \(options.diarize ? "on" : "off")")
 
+            case "/sensitivity", "sensitivity", "/sens":
+                guard let raw = args.first, let level = MicSensitivity.parse(raw) else {
+                    print("usage: /sensitivity high|normal|low")
+                    print("  current: \(options.sensitivity.summary)")
+                    print("  use `high` if the transcript has gaps and the mic meter reads below 0.02")
+                    continue
+                }
+                options.sensitivity = level
+                let you = LaneTuning.you(level)
+                print("sensitivity → \(level.summary)")
+                print(String(format: "  speech needs mic ≥ %.3f (was %.3f at normal)",
+                             you.minSegmentRMS, LaneTuning.youBase.minSegmentRMS))
+
             case "/translate", "translate":
                 options.applyTranslate(!options.translate)
                 print("translate → \(options.translate ? "on (output in English)" : "off")")
@@ -267,6 +280,7 @@ struct Shell: ParsableCommand {
                                    whisper-large-v2 (908 MB, best for bn/hi)
               /dump              toggle WAV dump to ~/Documents/Listnr/debug
               /diarize           toggle SpeakerKit on Lane B
+              /sensitivity <lvl> high|normal|low. use `high` for a quiet mic
               /translate         speak any language, transcript comes out English
               /status            show current options
               /help              this help
@@ -282,6 +296,7 @@ struct Shell: ParsableCommand {
             status:
               lang=\(options.language.rawValue)  model=\(model)  speakers=\(options.remoteSpeakers)
               diarize=\(options.diarize)  dump-wav=\(options.dumpWav)  translate=\(options.translate)
+              sensitivity=\(options.sensitivity.rawValue)
             """
         )
     }

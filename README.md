@@ -47,9 +47,9 @@ These are all known — please read before filing an issue:
 | **Memory grows with session length** | Whole-session audio is kept in RAM, roughly **460 MB per hour** across both lanes. Spilling to disk is planned. |
 | **Non-English is much weaker than English** | Whisper itself is far better at English than at Bangla or Hindi, at every model size. Listnr tunes its thresholds per writing system so it does not make this worse ([details](docs/models.md)), but it cannot close the gap. |
 | **Translation is English-only and one-way** | `/translate` uses Whisper's own task, which only targets English. No Bangla → Hindi, and the original wording is not kept alongside it. |
-| **Voice detection thresholds are fixed** | Speech detection uses absolute RMS. A very quiet or very hot microphone may need the numbers changed in code. |
+| **Voice detection thresholds are absolute** | Speech detection uses absolute RMS, so a very quiet or very hot mic needs `/sensitivity high` or `low`. Auto-calibration is planned. |
 | **Settings do not persist** | `/lang`, `/model`, `/speakers`, `/diarize`, `/translate`, and `/dump` all reset when you quit. |
-| **The capture layer has no automated tests** | 136 unit tests cover the pure logic. Anything touching real hardware is verified manually. |
+| **The capture layer has no automated tests** | 147 unit tests cover the pure logic. Anything touching real hardware is verified manually. |
 | **No GUI** | CLI only for now. |
 
 Found something not on this list? [Open an issue](https://github.com/rokib16x/listnr/issues/new/choose).
@@ -205,6 +205,7 @@ Full model table, the reasoning behind each default, and why non-English used to
 listnr> /speakers 2        # how many remote people to expect (1-6)
 listnr> /model <id>        # see `listnr models list`
 listnr> /diarize           # toggle SpeakerKit
+listnr> /sensitivity high  # quiet mic: hear more (see troubleshooting)
 listnr> /dump              # toggle WAV dumps to ~/Documents/Listnr/debug
 listnr> /status            # show current options
 listnr> /help

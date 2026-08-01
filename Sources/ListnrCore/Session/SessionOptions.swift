@@ -79,6 +79,9 @@ struct SessionOptions {
     /// supported language comes out as English. Whisper only translates *into*
     /// English; there is no other target.
     var translate: Bool = false
+    /// How loud speech must be before it is treated as speech. Raise this when
+    /// a quiet microphone leaves gaps in the transcript.
+    var sensitivity: MicSensitivity = .normal
     /// nil = run until stop
     var seconds: Double? = nil
     /// One line of key hints shown when the session goes live; set by the

@@ -53,6 +53,9 @@ struct Start: ParsableCommand {
     @Option(name: .long, help: "Language: en|auto|bn|hi|es|fr|de|ja|zh")
     var language: String = "en"
 
+    @Option(name: .long, help: "Speech detection: high|normal|low. Use high for a quiet mic.")
+    var sensitivity: String = "normal"
+
     func run() throws {
         if !skipDoctor {
             let checks = DoctorReport.run()
@@ -71,6 +74,11 @@ struct Start: ParsableCommand {
         options.transcribe = !noTranscribe
         options.diarize = !noDiarize
         options.translate = translate
+        guard let level = MicSensitivity.parse(sensitivity) else {
+            FileHandle.standardError.write(Data("unknown --sensitivity \(sensitivity)\n".utf8))
+            throw ExitCode(1)
+        }
+        options.sensitivity = level
         options.seconds = seconds
         options.modelID = model
 
