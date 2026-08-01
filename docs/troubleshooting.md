@@ -41,6 +41,45 @@ Two fixes, either works:
 Use `low` for the opposite problem: a hot microphone where keyboard noise and
 fans get transcribed as words.
 
+## Nobody else is in the transcript (`sys=0.000`)
+
+Lane B is the speaker output — everyone who is not you. If the level meter shows
+`sys=0.000` while someone is talking on the call, none of them is being captured.
+
+```text
+  levels  mic=0.062  sys=0.000
+! no system audio yet — remote voices will be missing.
+```
+
+**Confirm it is the capture, not the call.** Play music or a YouTube video out
+loud and run:
+
+```sh
+listnr start --seconds 15 --no-transcribe
+```
+
+- `sys=` moves → capture works. The problem is call-specific: check the meeting
+  is playing through this Mac's output and is not muted.
+- `sys=0.000` with audio clearly playing → the capture is broken. Continue below.
+
+**The usual cause is the Screen Recording permission**, and it fails in a way
+that looks like success. ScreenCaptureKit returns *silent buffers* rather than an
+error when the grant has lapsed, so the session starts, runs, and reports
+`sys=243.9s` of captured audio that happens to be pure silence.
+
+1. Run `listnr doctor` **in the terminal you actually launch Listnr from**. The
+   permission attaches to the terminal application, not to the `listnr` binary,
+   so checking from a different terminal tells you nothing.
+2. System Settings → Privacy & Security → **Screen & System Audio Recording** →
+   enable your terminal.
+3. **Quit and reopen that terminal.** macOS does not apply the change to an
+   already-running process.
+4. macOS re-asks for this permission periodically. If you dismissed that prompt,
+   the grant lapses silently — re-enable and restart the terminal again.
+
+If you switched terminals (Terminal → iTerm, or started using Ghostty for the
+Bangla rendering), the new one needs its own grant.
+
 ## Words go missing in the middle of a conversation
 
 ```text

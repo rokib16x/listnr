@@ -209,7 +209,17 @@ final class LiveSessionRunner: @unchecked Sendable {
             micPeak = max(micPeak, level)
             if level > 0.001 { micSeen = true }
         }
-        session.onSystemLevel = { lastSys = $0 }
+        // Lane B is the whole point of the tool, and it failing is invisible:
+        // ScreenCaptureKit happily delivers silent buffers when the permission
+        // has lapsed, so the session looks healthy and the transcript simply has
+        // no one else in it.
+        var sysSeen = false
+        var sysPeak: Float = 0
+        session.onSystemLevel = { level in
+            lastSys = level
+            sysPeak = max(sysPeak, level)
+            if level > 0.001 { sysSeen = true }
+        }
 
         // Hand buffers straight to the lane pipeline. Deliberately *not*
         // `Task { await lane.push(chunk) }`: unstructured tasks have no ordering
@@ -222,6 +232,8 @@ final class LiveSessionRunner: @unchecked Sendable {
             session.onSystemSamples = { chunk in othersLane.push(chunk) }
         }
 
+        // Only worth warning about when a remote lane is actually expected.
+        let captureSystemLane = options.transcribe
         let meter = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .utility))
         var meterTicks = 0
         meter.schedule(deadline: .now() + 0.5, repeating: 0.5)
@@ -234,8 +246,19 @@ final class LiveSessionRunner: @unchecked Sendable {
                     "\n! mic still silent. Check System Settings → Sound → Input, and speak louder\n".utf8
                 ))
             }
-            // 20 s in: audible, but never loud enough for a segment to survive
-            // the floor. Left unsaid, this looks like a transcription failure.
+            // 10 s of total silence on the speaker lane. Either nothing is
+            // playing, or the capture is not actually working — and the two are
+            // indistinguishable from the meter alone, so say both.
+            if meterTicks == 20, !sysSeen, captureSystemLane {
+                FileHandle.standardError.write(Data(
+                    ("\n! no system audio yet — remote voices will be missing.\n"
+                        + "  If someone is talking: System Settings → Privacy & Security →\n"
+                        + "  Screen & System Audio Recording → enable your terminal, then RESTART it.\n"
+                        + "  macOS re-asks periodically, and a lapsed grant returns silence, not an error.\n").utf8
+                ))
+            }
+            // Audible but too quiet to clear the segment floor. Left unsaid, this
+            // looks like a transcription failure.
             if meterTicks == 40, micSeen, micPeak < youThreshold {
                 let note = String(
                     format: "\n! mic peaked at %.3f but speech needs %.3f — most of your voice is being discarded.\n"
@@ -289,6 +312,14 @@ final class LiveSessionRunner: @unchecked Sendable {
                 result.durationSeconds, micSec, sysSec
             ).utf8
         ))
+
+        if options.transcribe, !sysSeen {
+            FileHandle.standardError.write(Data(
+                ("! Lane B captured only silence for the whole session, so there are no remote\n"
+                    + "  speakers in this transcript. Run `listnr doctor`, and confirm Screen &\n"
+                    + "  System Audio Recording is enabled for this terminal.\n").utf8
+            ))
+        }
 
         if options.dumpWav {
             // Not /tmp: that is world-readable at predictable paths, so raw
