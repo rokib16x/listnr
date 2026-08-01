@@ -19,3 +19,7 @@ DerivedData/
 *.m4a
 listnr_*.md
 Transcripts/
+
+# Release artifacts (built by .github/workflows/release.yml)
+dist/
+manual/

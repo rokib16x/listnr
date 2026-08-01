@@ -1,0 +1,141 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. v0.1.2). Dry run: no release is published."
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish
+    # Apple Silicon. Listnr is arm64-only by design (the Neural Engine is not
+    # optional), so there is no universal binary to lipo together and no
+    # cross-compilation matrix.
+    runs-on: macos-15
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          tag="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+          # A manual run is a rehearsal: build everything, publish nothing.
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "dry_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "dry_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Show toolchain
+        run: |
+          swift --version
+          uname -m
+
+      - name: Build
+        run: swift build -c release --arch arm64
+
+      - name: Test
+        run: swift test -c release
+
+      # Before anything is packaged: a tag that disagrees with the binary would
+      # otherwise publish a tarball whose checksum belongs to another version.
+      - name: Check version consistency
+        run: ./scripts/check-version.sh "${{ steps.tag.outputs.tag }}"
+
+      - name: Generate completions and man page
+        run: |
+          bin=".build/release/listnr"
+          mkdir -p dist/completions dist/man
+
+          # ArgumentParser generates these; there is nothing to hand-maintain.
+          "$bin" --generate-completion-script bash > dist/completions/listnr.bash
+          "$bin" --generate-completion-script zsh  > dist/completions/_listnr
+          "$bin" --generate-completion-script fish > dist/completions/listnr.fish
+
+          # The plugin runs in SwiftPM's sandbox and cannot write outside the
+          # package without being told to. It also auto-detects the executable:
+          # naming `listnr` explicitly makes it print usage and exit.
+          swift package plugin --allow-writing-to-directory dist/man \
+            generate-manual --output-directory dist/man
+          ls -la dist/man dist/completions
+
+      - name: Assemble the tarball
+        id: package
+        run: |
+          version="${{ steps.tag.outputs.version }}"
+          stage="listnr-${version}-macos-arm64"
+          mkdir -p "dist/${stage}"
+
+          cp .build/release/listnr "dist/${stage}/"
+          cp -R dist/completions "dist/${stage}/completions"
+          cp -R dist/man "dist/${stage}/man"
+          cp README.md LICENSE CHANGELOG.md "dist/${stage}/"
+
+          tar -C dist -czf "dist/${stage}.tar.gz" "${stage}"
+          shasum -a 256 "dist/${stage}.tar.gz" | tee "dist/${stage}.tar.gz.sha256"
+
+          echo "tarball=dist/${stage}.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(shasum -a 256 "dist/${stage}.tar.gz" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      # The formula builds from source, so it needs the checksum of GitHub's
+      # generated source tarball rather than the binary one above.
+      - name: Compute source tarball checksum for Homebrew
+        id: source
+        run: |
+          tag="${{ steps.tag.outputs.tag }}"
+          url="https://github.com/${{ github.repository }}/archive/refs/tags/${tag}.tar.gz"
+          if curl -fsSL "$url" -o /tmp/source.tar.gz; then
+            echo "sha256=$(shasum -a 256 /tmp/source.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          else
+            # Expected on a dry run, where the tag does not exist yet.
+            echo "sha256=UNAVAILABLE" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Verify the packaged binary runs
+        run: |
+          version="${{ steps.tag.outputs.version }}"
+          stage="listnr-${version}-macos-arm64"
+          tar -C /tmp -xzf "dist/${stage}.tar.gz"
+          "/tmp/${stage}/listnr" --version
+          "/tmp/${stage}/listnr" models list
+          test -s "/tmp/${stage}/completions/_listnr"
+          test -n "$(find "/tmp/${stage}/man" -name '*.1' -print -quit)"
+
+      - name: Summary
+        run: |
+          {
+            echo "### listnr ${{ steps.tag.outputs.tag }}"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Tarball SHA-256 | \`${{ steps.package.outputs.sha256 }}\` |"
+            echo "| Source SHA-256 (for the formula) | \`${{ steps.source.outputs.sha256 }}\` |"
+            echo "| Dry run | ${{ steps.tag.outputs.dry_run }} |"
+            echo
+            echo "Update the formula in \`rokib16x/homebrew-tap\` with the source SHA-256 above."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish the release
+        if: steps.tag.outputs.dry_run == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.tag.outputs.tag }}" \
+            --title "listnr ${{ steps.tag.outputs.tag }}" \
+            --notes "See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ steps.tag.outputs.tag }}/CHANGELOG.md). Requires macOS 14+ on Apple Silicon." \
+            --prerelease \
+            "${{ steps.package.outputs.tarball }}" \
+            "${{ steps.package.outputs.tarball }}.sha256"
