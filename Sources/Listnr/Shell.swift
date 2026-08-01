@@ -262,8 +262,9 @@ struct Shell: ParsableCommand {
               /speakers N        remote speaker hint (1-6)
               /model <id>        see `listnr models list`. English: whisper-base.en
                                  Other languages, fastest → most accurate:
-                                   whisper-small · whisper-large-v3-turbo-fast
-                                   whisper-medium · whisper-large-v2
+                                   whisper-small (207 MB)
+                                   whisper-large-v3-turbo-fast (615 MB, default)
+                                   whisper-large-v2 (908 MB, best for bn/hi)
               /dump              toggle WAV dump to ~/Documents/Listnr/debug
               /diarize           toggle SpeakerKit on Lane B
               /translate         speak any language, transcript comes out English
