@@ -1,11 +1,16 @@
 # Homebrew formula for Listnr.
 #
-# This file is the source of truth; the copy Homebrew actually reads lives in
-# the tap repository at github.com/rokib16x/homebrew-tap as `Formula/listnr.rb`.
-# See packaging/README.md for how to bootstrap that repo and what to update at
-# release time.
+# This repository doubles as its own Homebrew tap, so there is no separate
+# `homebrew-listnr` repo to keep in sync. Homebrew reads formulae from `Formula/`
+# at the root of a tapped repository, which is exactly where this lives.
 #
-#   brew install rokib16x/tap/listnr
+#   brew tap rokib16x/listnr https://github.com/rokib16x/listnr
+#   brew install listnr
+#
+# The two-argument form of `brew tap` is required: the one-argument shorthand
+# assumes a repo named `homebrew-<name>`, and this one is named `listnr`.
+#
+# See packaging/README.md for what to update at release time.
 #
 class Listnr < Formula
   desc "Local meeting listener: mic + system audio to a multi-speaker transcript"
