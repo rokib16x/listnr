@@ -8,6 +8,8 @@ While the version is `0.x`, the CLI surface may change in any minor release.
 
 ## [Unreleased]
 
+## [0.1.2-beta] - 2026-08-01
+
 ### Fixed
 
 - **Non-English transcription dropped correct speech and reported nothing.** The
@@ -280,6 +282,7 @@ current list. The significant ones in this release:
 - Settings changed in the shell do not persist across runs.
 - No automated test suite yet.
 
-[Unreleased]: https://github.com/rokib16x/listnr/compare/v0.1.1-beta...HEAD
+[Unreleased]: https://github.com/rokib16x/listnr/compare/v0.1.2-beta...HEAD
+[0.1.2-beta]: https://github.com/rokib16x/listnr/compare/v0.1.1-beta...v0.1.2-beta
 [0.1.1-beta]: https://github.com/rokib16x/listnr/compare/v0.1.0-beta...v0.1.1-beta
 [0.1.0-beta]: https://github.com/rokib16x/listnr/releases/tag/v0.1.0-beta
