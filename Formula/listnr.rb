@@ -26,8 +26,8 @@ class Listnr < Formula
   # start. Declaring them here turns that into an install-time refusal with a
   # clear message rather than a confusing runtime one.
   depends_on arch: :arm64
-  depends_on macos: :sonoma
   depends_on xcode: ["15.0", :build]
+  depends_on macos: :sonoma
 
   def install
     # --disable-sandbox: SwiftPM resolves dependencies over the network, which
@@ -44,10 +44,7 @@ class Listnr < Formula
     # `--shell=zsh`, which ArgumentParser silently ignores before falling back to
     # auto-detecting the invoking shell — so all three files would end up holding
     # completions for whatever shell the builder happened to be running.
-    generate_completions_from_executable(
-      bin/"listnr", "--generate-completion-script",
-      shells: [:bash, :zsh, :fish],
-    )
+    generate_completions_from_executable(bin/"listnr", "--generate-completion-script")
 
     # `--allow-writing-to-directory` rather than `--disable-sandbox`: the flag
     # belongs to the `plugin` subcommand, and putting `--disable-sandbox` ahead
