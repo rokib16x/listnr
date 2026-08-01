@@ -58,6 +58,9 @@ class Listnr < Formula
     # before `plugin`, while --allow-writing-to-directory belongs to `plugin`.
     # The tool name is deliberately omitted — generate-manual auto-detects the
     # executable, and naming it explicitly makes it print usage and exit.
+    # generate-manual will not create its own output directory; it exits 64 with
+    # "Output directory ... does not exist".
+    (buildpath/"manual").mkpath
     system "swift", "package", "--disable-sandbox", "plugin",
            "--allow-writing-to-directory", buildpath/"manual",
            "generate-manual", "--output-directory", buildpath/"manual"
