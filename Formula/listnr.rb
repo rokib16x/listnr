@@ -25,8 +25,8 @@ class Listnr < Formula
   # Intel Mac or an older macOS cannot run it at all — `listnr doctor` refuses to
   # start. Declaring them here turns that into an install-time refusal with a
   # clear message rather than a confusing runtime one.
-  depends_on arch: :arm64
   depends_on xcode: ["15.0", :build]
+  depends_on arch: :arm64
   depends_on macos: :sonoma
 
   def install
