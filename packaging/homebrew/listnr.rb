@@ -10,8 +10,8 @@
 class Listnr < Formula
   desc "Local meeting listener: mic + system audio to a multi-speaker transcript"
   homepage "https://github.com/rokib16x/listnr"
-  url "https://github.com/rokib16x/listnr/archive/refs/tags/v0.1.1-beta.tar.gz"
-  sha256 "REPLACE_WITH_SOURCE_TARBALL_SHA256"
+  url "https://github.com/rokib16x/listnr/archive/refs/tags/v0.1.2-beta.tar.gz"
+  sha256 "e545dd7257a91785758cf893f064a2c248bc98eac8e998d2a75c6214472b425d"
   license "MIT"
   head "https://github.com/rokib16x/listnr.git", branch: "main"
 

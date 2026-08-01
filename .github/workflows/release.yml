@@ -85,7 +85,10 @@ jobs:
           cp README.md LICENSE CHANGELOG.md "dist/${stage}/"
 
           tar -C dist -czf "dist/${stage}.tar.gz" "${stage}"
-          shasum -a 256 "dist/${stage}.tar.gz" | tee "dist/${stage}.tar.gz.sha256"
+          # Run from inside dist/ so the checksum file names the tarball alone.
+          # With a path in it, `shasum -c` fails for anyone who downloads the
+          # two files side by side.
+          ( cd dist && shasum -a 256 "${stage}.tar.gz" | tee "${stage}.tar.gz.sha256" )
 
           echo "tarball=dist/${stage}.tar.gz" >> "$GITHUB_OUTPUT"
           echo "sha256=$(shasum -a 256 "dist/${stage}.tar.gz" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"

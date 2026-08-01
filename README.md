@@ -100,7 +100,22 @@ What gets written to disk:
 brew install rokib16x/tap/listnr
 ```
 
-> Available from the first tagged release. Until then, build from source.
+> Not live yet — the tap is being set up. Use a pre-built binary or build from source until then.
+
+### Pre-built binary
+
+Apple Silicon only. Each [release](https://github.com/rokib16x/listnr/releases) ships the binary, shell completions, and a man page.
+
+```sh
+V=0.1.2-beta
+curl -LO "https://github.com/rokib16x/listnr/releases/download/v$V/listnr-$V-macos-arm64.tar.gz"
+tar -xzf "listnr-$V-macos-arm64.tar.gz"
+sudo cp "listnr-$V-macos-arm64/listnr" /usr/local/bin/listnr
+```
+
+While Listnr is a `0.x` prerelease, the URL needs the explicit tag — GitHub's `/releases/latest/` excludes prereleases and will 404.
+
+If you download it through a browser instead of `curl`, macOS quarantines it and refuses to run it. Clear that with `xattr -dr com.apple.quarantine listnr`.
 
 ### From source
 
