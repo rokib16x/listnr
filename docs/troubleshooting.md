@@ -49,6 +49,43 @@ fans get transcribed as words.
 
 The model cannot transcribe in real time on your machine, so the pipeline discarded audio rather than growing without bound. Move **down** the [model table](models.md#models): `whisper-large-v2` → `whisper-large-v3-turbo-fast` → `whisper-small`. This is why the non-English defaults are not the largest models.
 
+## Bangla, Hindi, or Tamil looks mangled in the terminal
+
+Almost always a rendering problem, not a transcription one. Check the saved file
+before assuming the text is wrong:
+
+```sh
+open ~/Documents/Listnr/listnr_*.md
+```
+
+If it reads correctly there, the transcript is fine and your terminal is the
+problem. Indic scripts need two things a terminal grid cannot do:
+
+- **Conjunct ligatures.** `ড` + `্` + `য` is three codepoints that must fuse into
+  one glyph, `ড্য`.
+- **Vowel reordering.** `ে` is stored *after* its consonant but must be drawn
+  *before* it.
+
+Terminal.app does neither — it paints one codepoint per fixed-width cell, in
+storage order. Nothing Listnr can do about that; the bytes it writes are correct
+UTF-8.
+
+Options, best first:
+
+1. **Read the saved Markdown.** Any app with real text layout renders it
+   properly — TextEdit, VS Code, a browser, Preview. This is what the `.md`
+   export is for.
+2. **Use a terminal that shapes text**, such as Ghostty or WezTerm, which run
+   glyphs through a real shaping engine. Better, though still imperfect for
+   Indic.
+3. **Set a font with Bengali coverage** if your terminal lets you: macOS ships
+   Kohinoor Bangla, Bangla MN, and Bangla Sangam MN. Terminal fonts like SF Mono
+   and Menlo have no Bengali glyphs at all, so macOS silently falls back per
+   character, which makes the shaping worse.
+
+If the saved file is *also* wrong, that is a real transcription problem — see
+the sections above.
+
 ## The transcript is gibberish, or repeats itself
 
 Usually one of three things:
