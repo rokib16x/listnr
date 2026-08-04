@@ -20,10 +20,10 @@ class Listnr < Formula
   homepage "https://github.com/rokib16x/listnr"
   # url, sha256 and version are rewritten by the release workflow on every tag;
   # see the "Point the formula at the new release" step. Do not hand-edit them.
-  url "https://github.com/rokib16x/listnr/releases/download/v0.1.2-beta/listnr-0.1.2-beta-macos-arm64.tar.gz"
-  sha256 "42f682b39f7eb6ac1d8c6d4ca1e7531b77bb735c29e0a76ad31d9f6e76dd8d45"
+  url "https://github.com/rokib16x/listnr/releases/download/v0.1.3-beta/listnr-0.1.3-beta-macos-arm64.tar.gz"
+  sha256 "abd5a9e24aae3a370570fc5eab7d5365508b091051de3d24e3cbe53c2181b98a"
   license "MIT"
-  version "0.1.2-beta"
+  version "0.1.3-beta"
 
   # Both are hard requirements, not preferences. Listnr runs Whisper on the
   # Neural Engine and captures system audio through ScreenCaptureKit, so an
