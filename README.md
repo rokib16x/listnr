@@ -2,7 +2,7 @@
 
 **A local meeting listener for macOS.** It captures **your microphone** and **your speaker / system audio** as two separate lanes, transcribes both on-device, and labels **You** plus remote **Speaker 1...N**. No bot in the call, no cloud, no account.
 
-Speak English, Bangla, Hindi, Spanish, French, German, Japanese, or Chinese — and optionally have any of them translated to English as it is transcribed.
+Speak English, Bangla, Hindi, Spanish, French, German, Japanese, or Chinese, and optionally have any of them translated to English as it is transcribed.
 
 [![CI](https://github.com/rokib16x/listnr/actions/workflows/ci.yml/badge.svg)](https://github.com/rokib16x/listnr/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -12,7 +12,7 @@ Speak English, Bangla, Hindi, Spanish, French, German, Japanese, or Chinese — 
 
 ![A Listnr transcript separating You, Speaker 1 and Speaker 2](demo/listnr-session.gif)
 
-*Verbatim output from a real session, replayed for the recording — nothing was cleaned up. `You` is the microphone lane, identified by which wire the audio arrived on, so it cannot be misattributed. `Speaker 1` and `Speaker 2` share the single speaker-output lane and are split apart by diarization once the session ends. [How this was recorded](demo/README.md).*
+*Verbatim output from a real session, replayed for the recording. Nothing was cleaned up. `You` is the microphone lane, identified by which wire the audio arrived on, so it cannot be misattributed. `Speaker 1` and `Speaker 2` share the single speaker-output lane and are split apart by diarization once the session ends. [How this was recorded](demo/README.md).*
 
 ```sh
 brew tap rokib16x/listnr https://github.com/rokib16x/listnr
@@ -27,13 +27,13 @@ listnr setup && listnr
 
 My team decides things on calls. Every one of them ended the same way: either somebody took notes and stopped participating, or nobody took notes and we rebuilt the decision from memory two days later, badly.
 
-Every tool I found wanted one of three things I was not willing to give it. **A bot in the call** — it only works on the platforms they support, and it shows up in the invite; we move between Discord, Meet, and a phone on speaker depending on who is around. **My conversations on somebody's server** — these calls are about unreleased work, salaries, and things I have not thought through yet, and an M-series Mac will run Whisper locally, so there is no reason the audio has to leave the room. **A subscription per seat, forever, for a transcript.**
+Every tool I found wanted one of three things I was not willing to give it. **A bot in the call.** It only works on the platforms they support, and it shows up in the invite; we move between Discord, Meet, and a phone on speaker depending on who is around. **My conversations on somebody's server.** These calls are about unreleased work, salaries, and things I have not thought through yet, and an M-series Mac will run Whisper locally, so there is no reason the audio has to leave the room. **A subscription per seat, forever, for a transcript.**
 
-The design comes from what failed first. I tried mixing the microphone and the call audio into one waveform and handing that to Whisper. You get plausible text with the speakers scrambled, invented sentences whenever two people talk at once, and a transcript that is confidently wrong — which is worse than no transcript, because you cannot tell which lines to trust.
+The design comes from what failed first. I tried mixing the microphone and the call audio into one waveform and handing that to Whisper. You get plausible text with the speakers scrambled, invented sentences whenever two people talk at once, and a transcript that is confidently wrong, which is worse than no transcript, because you cannot tell which lines to trust.
 
 So **the two lanes never get mixed before transcription.** Your voice is identified by which wire it arrived on, so it can never be misattributed. The remote voices share one wire, so they go through speaker diarization to be split apart. More work than mixing, and the only way I found to get a transcript I actually believe.
 
-I use it for standups, design and debugging calls, and client calls with everyone's agreement — including calls in Bangla and Hindi mixed with English, which most tools handle poorly.
+I use it for standups, design and debugging calls, and client calls with everyone's agreement, including calls in Bangla and Hindi mixed with English, which most tools handle poorly.
 
 It is a CLI because that is what I needed first. A menubar app is on the roadmap. If you make it better, [send a PR](CONTRIBUTING.md).
 
@@ -43,7 +43,7 @@ It is a CLI because that is what I needed first. A menubar app is on the roadmap
 
 Listnr is at **`0.1.3-beta`**. The core pipeline works and produces transcripts I rely on, but this is early software with one maintainer, and the CLI may change in any `0.x` release.
 
-These are all known — please read before filing an issue:
+These are all known. Please read before filing an issue:
 
 | Limitation | Detail |
 |---|---|
@@ -64,7 +64,7 @@ Found something not on this list? [Open an issue](https://github.com/rokib16x/li
 
 Listnr records the voice of everyone on your call. **In a lot of places, doing that without their consent is illegal.**
 
-- **All-party consent jurisdictions** — including California, Illinois, Florida, Pennsylvania, Washington, and much of the EU under GDPR — require consent from *every* participant, not just you.
+- **All-party consent jurisdictions**, including California, Illinois, Florida, Pennsylvania, Washington, and much of the EU under GDPR, require consent from *every* participant, not just you.
 - The rules vary by state, by country, and by whether the call is business or personal. They apply to the act of *recording*, not only to sharing it.
 
 **Complying with the law where you and every participant are located is your responsibility.** Tell people you are recording, get their agreement, and accept no for an answer. This software is provided as-is with no liability for how it gets used; see the [LICENSE](LICENSE).
@@ -79,7 +79,7 @@ The polite version is also the easy version. Say "I'm running a local transcribe
 
 There is exactly one outbound request Listnr ever makes:
 
-> **On first run it downloads model weights from Hugging Face** (`argmaxinc/whisperkit-coreml` for transcription, `argmaxinc/speakerkit-coreml` for diarization) — between 73 MB and 1.5 GB depending on the model, plus about 150 MB for diarization. No audio, no text, nothing identifying is sent. A plain file download, once per model.
+> **On first run it downloads model weights from Hugging Face** (`argmaxinc/whisperkit-coreml` for transcription, `argmaxinc/speakerkit-coreml` for diarization), between 73 MB and 1.5 GB depending on the model, plus about 150 MB for diarization. No audio, no text, nothing identifying is sent. A plain file download, once per model.
 
 After that it runs fully offline. To confirm, fetch a model and pull your network connection:
 
@@ -110,7 +110,7 @@ brew trust --tap rokib16x/listnr
 brew install listnr
 ```
 
-Three commands rather than one, for two reasons. `brew tap` needs the explicit URL because its one-argument shorthand assumes a repo named `homebrew-<name>`. And Homebrew 6 refuses to load formulae from third-party taps until you trust them — which applies to any tap, not just this one.
+Three commands rather than one, for two reasons. `brew tap` needs the explicit URL because its one-argument shorthand assumes a repo named `homebrew-<name>`. And Homebrew 6 refuses to load formulae from third-party taps until you trust them, which applies to any tap, not just this one.
 
 This installs the prebuilt binary, so it takes seconds rather than the several minutes a source build spends compiling WhisperKit. You get the binary, a man page, and completions for bash, zsh, and fish.
 
@@ -131,9 +131,9 @@ tar -xzf "listnr-$V-macos-arm64.tar.gz"
 sudo cp "listnr-$V-macos-arm64/listnr" /usr/local/bin/listnr
 ```
 
-The binary is signed and notarized, but a notarization ticket cannot be stapled to a bare binary — only to a `.pkg`, `.dmg`, or `.app`. So if you fetch this tarball in a browser rather than with `curl`, macOS quarantines it and Gatekeeper falls back to an online check on first run. The `.pkg` above has no such caveat, and `brew` and `curl` never set the quarantine attribute at all.
+The binary is signed and notarized, but a notarization ticket cannot be stapled to a bare binary, only to a `.pkg`, `.dmg`, or `.app`. So if you fetch this tarball in a browser rather than with `curl`, macOS quarantines it and Gatekeeper falls back to an online check on first run. The `.pkg` above has no such caveat, and `brew` and `curl` never set the quarantine attribute at all.
 
-While Listnr is a `0.x` prerelease, the URL needs the explicit tag — GitHub's `/releases/latest/` excludes prereleases and will 404.
+While Listnr is a `0.x` prerelease, the URL needs the explicit tag. GitHub's `/releases/latest/` excludes prereleases and will 404.
 
 If you download it through a browser instead of `curl`, macOS quarantines it and refuses to run it. Clear that with `xattr -dr com.apple.quarantine listnr`.
 
@@ -166,13 +166,13 @@ Two things follow. Switching from Terminal to iTerm means granting them again, a
 
 Both are required to start; there is no microphone-only mode, because a meeting transcript without the other side is not one.
 
-The Screen Recording permission is how macOS gates system audio through ScreenCaptureKit. Listnr asks for a 2x2 pixel video stream it never reads, purely because the API insists on one. **No screen content is captured, stored, or transmitted** — see [`SystemAudioCapture.swift`](Sources/ListnrCore/Capture/SystemAudioCapture.swift).
+The Screen Recording permission is how macOS gates system audio through ScreenCaptureKit. Listnr asks for a 2x2 pixel video stream it never reads, purely because the API insists on one. **No screen content is captured, stored, or transmitted.** See [`SystemAudioCapture.swift`](Sources/ListnrCore/Capture/SystemAudioCapture.swift).
 
 ---
 
 ## Usage
 
-1. Put on a **headset**. This matters more than anything else on this page — open speakers leak the remote voices back into your microphone, which puts the same person on both lanes and ruins the speaker separation.
+1. Put on a **headset**. This matters more than anything else on this page. Open speakers leak the remote voices back into your microphone, which puts the same person on both lanes and ruins the speaker separation.
 2. Join a call, or just play audio through the speakers.
 3. Run `listnr`, then:
 
@@ -202,12 +202,12 @@ listnr> /lang auto         # detect once at the start, then lock
 listnr> /translate         # speak any language, transcript comes out English
 ```
 
-Each language picks a sensible default model, so `/lang` is usually all you touch. Name the language rather than using `auto` — detection runs once per session and locks, but it still has to make that call on a second or two of speech.
+Each language picks a sensible default model, so `/lang` is usually all you touch. Name the language rather than using `auto`. Detection runs once per session and locks, but it still has to make that call on a second or two of speech.
 
 Two things are worth knowing before you tune anything:
 
-- **The non-English defaults are not the most accurate models, on purpose.** They aim to keep pace with a live conversation, because a model that cannot has its audio dropped by the pipeline — you lose whole utterances rather than getting rougher text. Reach for `/model whisper-large-v2` when accuracy matters more than latency.
-- **`/translate` switches models automatically.** The turbo builds cannot translate at all — they silently return the original language — so turning it on moves you to `whisper-large-v2`.
+- **The non-English defaults are not the most accurate models, on purpose.** They aim to keep pace with a live conversation, because a model that cannot has its audio dropped by the pipeline, so you lose whole utterances rather than getting rougher text. Reach for `/model whisper-large-v2` when accuracy matters more than latency.
+- **`/translate` switches models automatically.** The turbo builds cannot translate at all (they silently return the original language), so turning it on moves you to `whisper-large-v2`.
 
 Full model table, the reasoning behind each default, and why non-English used to look broken: **[docs/models.md](docs/models.md)**.
 
@@ -236,7 +236,7 @@ listnr models download whisper-large-v2                 # pre-fetch before a cal
 
 The transcript goes to **stdout**; progress, level meters, and diagnostics go to **stderr**, so you can redirect just the transcript. Structured `--json` output is planned.
 
-Contradictory options — an English-only model with a non-English language, or a turbo model with `--translate` — are reported before the session starts rather than quietly producing the wrong thing.
+Contradictory options, such as an English-only model with a non-English language or a turbo model with `--translate`, are reported before the session starts rather than quietly producing the wrong thing.
 
 ### Something wrong?
 
@@ -258,7 +258,7 @@ Three rules hold the whole thing together:
 
 1. **Lane A and Lane B are never mixed before transcription.** Once two voices share one waveform, no post-processing recovers who said what, and Whisper will invent text rather than admit it.
 2. **You are always Lane A.** Your identity comes from which wire the audio arrived on, so it cannot be misattributed.
-3. **Remote people live on Lane B**, where several voices arrive on a single wire — which is exactly why diarization is needed instead of a simple "You versus Others" split.
+3. **Remote people live on Lane B**, where several voices arrive on a single wire, which is exactly why diarization is needed instead of a simple "You versus Others" split.
 
 [docs/plan.md](docs/plan.md) has the full architecture and milestone history. It predates some of the implementation and describes a couple of choices (TOML config, a Core Audio process tap) the code does not use.
 
