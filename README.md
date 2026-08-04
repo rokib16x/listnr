@@ -10,6 +10,10 @@ Speak English, Bangla, Hindi, Spanish, French, German, Japanese, or Chinese — 
 
 **Requires:** macOS 14 or later on Apple Silicon (M1 or newer). Intel Macs are not supported.
 
+![A Listnr transcript separating You, Speaker 1 and Speaker 2](demo/listnr-session.gif)
+
+*Verbatim output from a real session, replayed for the recording — nothing was cleaned up. `You` is the microphone lane, identified by which wire the audio arrived on, so it cannot be misattributed. `Speaker 1` and `Speaker 2` share the single speaker-output lane and are split apart by diarization once the session ends. [How this was recorded](demo/README.md).*
+
 ```sh
 brew tap rokib16x/listnr https://github.com/rokib16x/listnr
 brew trust --tap rokib16x/listnr
