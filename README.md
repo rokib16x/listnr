@@ -37,7 +37,7 @@ It is a CLI because that is what I needed first. A menubar app is on the roadmap
 
 ## Status: beta
 
-Listnr is at **`0.1.2-beta`**. The core pipeline works and produces transcripts I rely on, but this is early software with one maintainer, and the CLI may change in any `0.x` release.
+Listnr is at **`0.1.3-beta`**. The core pipeline works and produces transcripts I rely on, but this is early software with one maintainer, and the CLI may change in any `0.x` release.
 
 These are all known — please read before filing an issue:
 
@@ -119,7 +119,7 @@ Download `listnr-<version>.pkg` from the [latest release](https://github.com/rok
 Apple Silicon only. Each [release](https://github.com/rokib16x/listnr/releases) ships the binary, shell completions, and a man page.
 
 ```sh
-V=0.1.2-beta
+V=0.1.3-beta
 curl -LO "https://github.com/rokib16x/listnr/releases/download/v$V/listnr-$V-macos-arm64.tar.gz"
 tar -xzf "listnr-$V-macos-arm64.tar.gz"
 sudo cp "listnr-$V-macos-arm64/listnr" /usr/local/bin/listnr

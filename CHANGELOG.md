@@ -8,6 +8,8 @@ While the version is `0.x`, the CLI surface may change in any minor release.
 
 ## [Unreleased]
 
+## [0.1.3-beta] - 2026-08-04
+
 ### Added
 
 - **`/sensitivity` and `--sensitivity`, because a quiet microphone was silently
@@ -27,6 +29,56 @@ While the version is `0.x`, the CLI surface may change in any minor release.
   - Around twenty seconds in, a session whose microphone is audible but never
     clears the floor now says so, with the measured peak and the threshold it
     needed to beat.
+
+- **Lane B now says when it has heard nothing at all.** The microphone lane had
+  two warnings for being too quiet; the speaker lane had none, despite being the
+  reason the tool exists. ScreenCaptureKit returns silent buffers rather than an
+  error when the Screen Recording grant has lapsed, so a session would report
+  several minutes of captured system audio, finish cleanly, and produce a
+  transcript with no remote speakers and nothing explaining why. It now warns 10
+  seconds in, and again in the end-of-capture summary so it survives in the
+  scrollback. Both name the permission and the fact that the terminal has to be
+  restarted after granting it.
+
+- **Homebrew install.** This repository is now its own tap, so there is no
+  separate `homebrew-listnr` repo:
+
+  ```sh
+  brew tap rokib16x/listnr https://github.com/rokib16x/listnr
+  brew trust --tap rokib16x/listnr
+  brew install listnr
+  ```
+
+  Three commands rather than one: `brew tap` needs the explicit URL because its
+  one-argument shorthand assumes a repo named `homebrew-<name>`, and Homebrew 6
+  refuses to load formulae from any untrusted third-party tap. The install brings
+  the binary, a man page, and completions for bash, zsh and fish.
+
+- **Releases are signed with a Developer ID and notarized by Apple.** Each
+  release now also carries `listnr-<version>.pkg`, which is stapled, so a browser
+  download installs without the "developer cannot be verified" dialog and without
+  a manual `xattr -dr com.apple.quarantine`. The `brew` and `curl` paths never
+  showed that warning — neither sets the quarantine attribute — so this fixes the
+  path a new user is most likely to take.
+
+  A notarization ticket can only be stapled to a `.pkg`, `.dmg` or `.app`, never
+  to a bare binary or a tarball. The tarball's binary is notarized too, which
+  makes Gatekeeper's online check pass, but it cannot be stapled; the `.pkg` is
+  the artefact that is warning-free offline.
+
+### Changed
+
+- **The Homebrew formula installs the released binary instead of compiling it.**
+  A source build spent several minutes on WhisperKit, swift-transformers and
+  swift-crypto, and produced an unsigned binary regardless of what the release
+  shipped. Installs are now seconds, and they deliver the same signed, notarized
+  binary that was actually tested. The trade is that `brew install --HEAD` no
+  longer works, since a source install would need a separate code path in the
+  formula.
+
+- **The formula's `url`, `sha256` and `version` are rewritten by the release
+  workflow** rather than by hand. The formula pins an exact release artefact, and
+  hand-copying a checksum is precisely where a release goes wrong.
 
 ## [0.1.2-beta] - 2026-08-01
 

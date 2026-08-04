@@ -101,7 +101,7 @@ release, since that is what the formula installs.
 If you ever need to reproduce it manually:
 
 ```sh
-V=0.1.2-beta
+V=0.1.3-beta
 curl -sL "https://github.com/rokib16x/listnr/releases/download/v$V/listnr-$V-macos-arm64.tar.gz" | shasum -a 256
 ```
 
