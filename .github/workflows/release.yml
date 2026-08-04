@@ -318,14 +318,16 @@ jobs:
           git fetch origin main
           git checkout -B main origin/main
 
+          # Only two lines: the formula carries no explicit `version`, because
+          # Homebrew scans it from the URL and `brew audit --strict` rejects a
+          # redundant one.
           /usr/bin/sed -i '' \
             -e "s|^  url \".*\"|  url \"${url}\"|" \
             -e "s|^  sha256 \".*\"|  sha256 \"${SHA256}\"|" \
-            -e "s|^  version \".*\"|  version \"${VERSION}\"|" \
             Formula/listnr.rb
 
-          # All three must have landed, or the formula would install a mismatched
-          # artefact or report the wrong version.
+          # Both must have landed, or the formula would install a mismatched
+          # artefact. VERSION is checked via the URL it appears in.
           for expect in "$url" "$SHA256" "$VERSION"; do
             grep -q "$expect" Formula/listnr.rb || {
               echo "::error title=Formula::substitution failed for '$expect'"; exit 1; }
