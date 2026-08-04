@@ -108,7 +108,11 @@ brew install listnr
 
 Three commands rather than one, for two reasons. `brew tap` needs the explicit URL because its one-argument shorthand assumes a repo named `homebrew-<name>`. And Homebrew 6 refuses to load formulae from third-party taps until you trust them — which applies to any tap, not just this one.
 
-This builds from source, so the first install takes several minutes (it compiles WhisperKit). It installs the binary, a man page, and completions for bash, zsh, and fish.
+This installs the prebuilt binary, so it takes seconds rather than the several minutes a source build spends compiling WhisperKit. You get the binary, a man page, and completions for bash, zsh, and fish.
+
+### Signed installer
+
+Download `listnr-<version>.pkg` from the [latest release](https://github.com/rokib16x/listnr/releases/latest) and open it. The package is signed with a Developer ID and notarized by Apple, so it installs without the "unidentified developer" warning. `listnr` goes to `/usr/local/bin`.
 
 ### Pre-built binary
 
@@ -120,6 +124,8 @@ curl -LO "https://github.com/rokib16x/listnr/releases/download/v$V/listnr-$V-mac
 tar -xzf "listnr-$V-macos-arm64.tar.gz"
 sudo cp "listnr-$V-macos-arm64/listnr" /usr/local/bin/listnr
 ```
+
+The binary is signed and notarized, but a notarization ticket cannot be stapled to a bare binary — only to a `.pkg`, `.dmg`, or `.app`. So if you fetch this tarball in a browser rather than with `curl`, macOS quarantines it and Gatekeeper falls back to an online check on first run. The `.pkg` above has no such caveat, and `brew` and `curl` never set the quarantine attribute at all.
 
 While Listnr is a `0.x` prerelease, the URL needs the explicit tag — GitHub's `/releases/latest/` excludes prereleases and will 404.
 

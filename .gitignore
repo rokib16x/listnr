@@ -23,3 +23,8 @@ Transcripts/
 # Release artifacts (built by .github/workflows/release.yml)
 dist/
 manual/
+
+# Code-signing material: private keys, certificates, the App Store Connect
+# notarization key, and the .p12 password. Committing any of it means revoking
+# the certificates and starting over. See Signing/setup-signing.sh.
+Signing/private/

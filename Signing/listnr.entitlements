@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Notarization requires the hardened runtime, and the hardened runtime
+	     denies microphone access unless the binary carries this entitlement.
+	     Lane A (AVAudioEngine) stops working without it. -->
+	<key>com.apple.security.device.audio-input</key>
+	<true/>
+
+	<!-- Lane B (ScreenCaptureKit) is gated by TCC only; there is no hardened
+	     runtime entitlement for screen capture, so nothing is needed here. -->
+</dict>
+</plist>

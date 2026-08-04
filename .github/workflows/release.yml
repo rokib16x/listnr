@@ -55,6 +55,63 @@ jobs:
       - name: Check version consistency
         run: ./scripts/check-version.sh "${{ steps.tag.outputs.tag }}"
 
+      # ------------------------------------------------------------ signing
+      # The certificates live in a throwaway keychain that exists only for this
+      # job. The runner's login keychain is shared; never unlock it.
+      - name: Import Developer ID certificates
+        env:
+          APP_CERT_P12: ${{ secrets.MACOS_APP_CERT_P12 }}
+          INSTALLER_CERT_P12: ${{ secrets.MACOS_INSTALLER_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/build.keychain-db"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$keychain"
+
+          # Two distinct certificates with distinct keys: Developer ID
+          # Application signs the binary, Developer ID Installer signs the pkg.
+          # Neither can substitute for the other.
+          for kind in app installer; do
+            var="APP_CERT_P12"; [ "$kind" = installer ] && var="INSTALLER_CERT_P12"
+            printf '%s' "${!var}" | base64 --decode > "$RUNNER_TEMP/$kind.p12"
+            security import "$RUNNER_TEMP/$kind.p12" -k "$keychain" \
+              -P "$CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
+            rm -f "$RUNNER_TEMP/$kind.p12"
+          done
+
+          # Both certificates are issued by "Developer ID Certification
+          # Authority (G2)", which is NOT preinstalled on the runner. Without it
+          # codesign fails with "unable to build chain to self-signed root" and
+          # emits no signature at all. Keychain Access installs it silently when
+          # a .cer is double-clicked locally, so this only ever breaks in CI.
+          ca="$RUNNER_TEMP/DeveloperIDG2CA.cer"
+          curl -fsSL -o "$ca" \
+            https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer
+          # Pinned so a substituted CA cannot enter the keychain that signs the
+          # release.
+          expected="F16CD3C54C7F83CEA4BF1A3E6A0819C8AAA8E4A1528FD144715F350643D2DF3A"
+          actual="$(/usr/bin/openssl x509 -inform DER -in "$ca" -noout \
+            -fingerprint -sha256 | tr -d ':' | cut -d= -f2)"
+          [ "$actual" = "$expected" ] || {
+            echo "::error title=CA mismatch::got $actual, expected $expected"; exit 1; }
+          security import "$ca" -k "$keychain" \
+            -T /usr/bin/codesign -T /usr/bin/productsign
+
+          security set-key-partition-list \
+            -S apple-tool:,apple:,codesign:,productsign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$keychain" > /dev/null
+          # codesign searches the keychain SEARCH LIST, not a keychain passed by
+          # path, so the throwaway keychain has to be added to it.
+          security list-keychain -d user -s "$keychain" login.keychain-db
+
+          security find-identity -v | grep -q "Developer ID Application" \
+            || { echo "::error::Developer ID Application certificate missing"; exit 1; }
+          security find-identity -v | grep -q "Developer ID Installer" \
+            || { echo "::error::Developer ID Installer certificate missing"; exit 1; }
+
       - name: Generate completions and man page
         run: |
           bin=".build/release/listnr"
@@ -71,6 +128,32 @@ jobs:
           swift package plugin --allow-writing-to-directory dist/man \
             generate-manual --output-directory dist/man
           ls -la dist/man dist/completions
+
+      # Deliberately after the man page: `swift package plugin generate-manual`
+      # builds the executable target, which would overwrite a signature applied
+      # before it and silently ship an unsigned binary.
+      - name: Sign the binary
+        run: |
+          set -euo pipefail
+          # --options runtime is the hardened runtime, required for
+          # notarization. It also denies microphone access unless the entitlement
+          # is present, which would leave Lane A silently dead in a signed build.
+          # The identity is matched by name prefix; the throwaway keychain holds
+          # exactly one of each, so the prefix is unambiguous.
+          codesign --force --sign "Developer ID Application" \
+            --options runtime \
+            --entitlements Signing/listnr.entitlements \
+            --timestamp \
+            .build/release/listnr
+
+          codesign --verify --strict --verbose=2 .build/release/listnr
+          codesign --display --verbose=2 .build/release/listnr
+
+          # Fail loudly if the entitlement did not survive: the binary would
+          # still run, but could never open the microphone.
+          codesign --display --entitlements - --xml .build/release/listnr 2>/dev/null \
+            | grep -q "com.apple.security.device.audio-input" \
+            || { echo "::error title=Entitlement missing::audio-input not embedded"; exit 1; }
 
       - name: Assemble the tarball
         id: package
@@ -93,22 +176,75 @@ jobs:
           echo "tarball=dist/${stage}.tar.gz" >> "$GITHUB_OUTPUT"
           echo "sha256=$(shasum -a 256 "dist/${stage}.tar.gz" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
-      # The formula builds from source, so it needs the checksum of GitHub's
-      # generated source tarball rather than the binary one above.
-      - name: Compute source tarball checksum for Homebrew
-        id: source
+      # The formula installs the prebuilt binary, so the checksum it needs is the
+      # one from `Assemble the tarball` above. No source tarball is involved.
+
+      # A .pkg exists for one reason: a notarization ticket can only be stapled
+      # to a pkg, dmg or app — never to a bare binary or a tarball. Stapling is
+      # what removes the "unidentified developer" dialog offline. Homebrew
+      # fetches over curl, which never sets the quarantine attribute, so the
+      # brew path does not need this; a browser download does.
+      - name: Build and sign the installer package
+        id: pkg
         run: |
-          tag="${{ steps.tag.outputs.tag }}"
-          url="https://github.com/${{ github.repository }}/archive/refs/tags/${tag}.tar.gz"
-          if curl -fsSL "$url" -o /tmp/source.tar.gz; then
-            echo "sha256=$(shasum -a 256 /tmp/source.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-          else
-            # Expected on a dry run, where the tag does not exist yet.
-            echo "sha256=UNAVAILABLE" >> "$GITHUB_OUTPUT"
-          fi
+          set -euo pipefail
+          version="${{ steps.tag.outputs.version }}"
+          mkdir -p dist/pkgroot/usr/local/bin
+          cp .build/release/listnr dist/pkgroot/usr/local/bin/listnr
+
+          # PKG_IDENTIFIER must stay stable across releases: macOS uses it to
+          # recognise an upgrade rather than a second parallel install.
+          pkgbuild --root dist/pkgroot \
+            --identifier us.aibac.listnr \
+            --version "$version" \
+            --install-location / \
+            dist/listnr-unsigned.pkg
+
+          productsign --sign "Developer ID Installer" \
+            dist/listnr-unsigned.pkg "dist/listnr-${version}.pkg"
+          rm dist/listnr-unsigned.pkg
+
+          pkgutil --check-signature "dist/listnr-${version}.pkg"
+          echo "pkg=dist/listnr-${version}.pkg" >> "$GITHUB_OUTPUT"
+
+      - name: Notarize
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+        run: |
+          set -euo pipefail
+          version="${{ steps.tag.outputs.version }}"
+          key="$RUNNER_TEMP/notary.p8"
+          echo "$NOTARY_KEY_P8" | base64 --decode > "$key"
+          notarize() {
+            xcrun notarytool submit "$1" \
+              --key "$key" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" \
+              --wait --timeout 30m
+          }
+
+          notarize "dist/listnr-${version}.pkg"
+          xcrun stapler staple "dist/listnr-${version}.pkg"
+          xcrun stapler validate "dist/listnr-${version}.pkg"
+
+          # The binary is notarized too. The ticket cannot be stapled to it, but
+          # notarizing registers this exact signature with Apple so Gatekeeper's
+          # online check passes for anyone who extracts the tarball from a
+          # browser download. notarytool accepts zip/pkg/dmg only, hence ditto.
+          ditto -c -k --keepParent .build/release/listnr "$RUNNER_TEMP/listnr.zip"
+          notarize "$RUNNER_TEMP/listnr.zip"
+          rm -f "$key"
+
+      - name: Verify Gatekeeper acceptance
+        run: |
+          set -euo pipefail
+          version="${{ steps.tag.outputs.version }}"
+          # The pkg is the stapled artifact, so this must pass outright.
+          spctl --assess --type install --verbose=4 "dist/listnr-${version}.pkg"
 
       - name: Verify the packaged binary runs
         run: |
+          set -euo pipefail
           version="${{ steps.tag.outputs.version }}"
           stage="listnr-${version}-macos-arm64"
           tar -C /tmp -xzf "dist/${stage}.tar.gz"
@@ -116,6 +252,22 @@ jobs:
           "/tmp/${stage}/listnr" models list
           test -s "/tmp/${stage}/completions/_listnr"
           test -n "$(find "/tmp/${stage}/man" -name '*.1' -print -quit)"
+
+          # The signature has to survive tar/untar, or every Homebrew install
+          # ships an unsigned binary while the pkg looks fine.
+          codesign --verify --strict --verbose=2 "/tmp/${stage}/listnr"
+
+      # Always uploaded, so a dry run still hands you the signed, notarized pkg
+      # to check against Gatekeeper on a real Mac.
+      - name: Upload artifacts for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: listnr-${{ steps.tag.outputs.version }}
+          path: |
+            dist/*.pkg
+            dist/*.tar.gz
+            dist/*.sha256
+          if-no-files-found: error
 
       - name: Summary
         run: |
@@ -125,10 +277,14 @@ jobs:
             echo "| | |"
             echo "|---|---|"
             echo "| Tarball SHA-256 | \`${{ steps.package.outputs.sha256 }}\` |"
-            echo "| Source SHA-256 (for the formula) | \`${{ steps.source.outputs.sha256 }}\` |"
+            echo "| Installer | \`${{ steps.pkg.outputs.pkg }}\` (signed, notarized, stapled) |"
             echo "| Dry run | ${{ steps.tag.outputs.dry_run }} |"
             echo
-            echo "Update \`Formula/listnr.rb\` in this repo with the source SHA-256 above."
+            if [ "${{ steps.tag.outputs.dry_run }}" = "true" ]; then
+              echo "Nothing was published. The formula was not updated."
+            else
+              echo "\`Formula/listnr.rb\` was updated on \`main\` with the tarball checksum above."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish the release
@@ -141,4 +297,48 @@ jobs:
             --notes "See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ steps.tag.outputs.tag }}/CHANGELOG.md). Requires macOS 14+ on Apple Silicon." \
             --prerelease \
             "${{ steps.package.outputs.tarball }}" \
-            "${{ steps.package.outputs.tarball }}.sha256"
+            "${{ steps.package.outputs.tarball }}.sha256" \
+            "${{ steps.pkg.outputs.pkg }}"
+
+      # The formula pins an exact URL and checksum, so hand-copying it is exactly
+      # where a release goes wrong. This repo is its own tap, so the bump is a
+      # commit on main rather than a push to a second repository.
+      - name: Point the formula at the new release
+        if: steps.tag.outputs.dry_run == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.tag.outputs.version }}
+          SHA256: ${{ steps.package.outputs.sha256 }}
+        run: |
+          set -euo pipefail
+          url="https://github.com/${{ github.repository }}/releases/download/${TAG}/listnr-${VERSION}-macos-arm64.tar.gz"
+
+          # The tag build has a detached HEAD; the formula lives on main.
+          git fetch origin main
+          git checkout -B main origin/main
+
+          /usr/bin/sed -i '' \
+            -e "s|^  url \".*\"|  url \"${url}\"|" \
+            -e "s|^  sha256 \".*\"|  sha256 \"${SHA256}\"|" \
+            -e "s|^  version \".*\"|  version \"${VERSION}\"|" \
+            Formula/listnr.rb
+
+          # All three must have landed, or the formula would install a mismatched
+          # artefact or report the wrong version.
+          for expect in "$url" "$SHA256" "$VERSION"; do
+            grep -q "$expect" Formula/listnr.rb || {
+              echo "::error title=Formula::substitution failed for '$expect'"; exit 1; }
+          done
+          ruby -c Formula/listnr.rb
+
+          if git diff --quiet Formula/listnr.rb; then
+            echo "::notice::Formula already points at $TAG; nothing to commit."
+            exit 0
+          fi
+
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/listnr.rb
+          git commit -m "build: point the formula at ${TAG}"
+          git push origin main

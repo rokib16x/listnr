@@ -21,17 +21,43 @@ How a Listnr release is cut, and how the Homebrew tap is set up.
    git tag v0.1.2 && git push origin v0.1.2
    ```
 
-   [`.github/workflows/release.yml`](../.github/workflows/release.yml) then builds, tests, generates completions and the man page, tars everything, verifies the packaged binary actually runs, and publishes the GitHub release.
+   [`.github/workflows/release.yml`](../.github/workflows/release.yml) then builds, tests, generates completions and the man page, **signs the binary, builds and signs a `.pkg`, notarizes and staples it**, verifies the packaged binary runs, publishes the GitHub release, and commits the formula bump to `main`.
 
-5. **Update the tap** with the source checksum printed in the workflow summary. See below.
+That is the whole process. There is **no manual step 5** — see [Code signing](#code-signing) for why the formula bump is automated.
 
-To rehearse without publishing, run the workflow manually from the Actions tab and pass a tag — it builds and verifies everything but skips the release step.
+To rehearse without publishing, run the workflow manually from the Actions tab and pass a tag. It builds, signs and notarizes everything, uploads the artefacts for inspection, and skips both the release and the formula bump.
 
-### What ships in the tarball
+### What ships in a release
 
-`listnr-<version>-macos-arm64.tar.gz`, containing the binary, `completions/` for bash/zsh/fish, `man/listnr.1`, plus README, LICENSE, and CHANGELOG. Around 3 MB. Model weights are **not** bundled — they download on first use.
+| Artefact | What it is |
+|---|---|
+| `listnr-<version>-macos-arm64.tar.gz` | The binary, `completions/` for bash/zsh/fish, `man/listnr.1`, plus README, LICENSE and CHANGELOG. Around 3 MB. What the formula installs. |
+| `listnr-<version>-macos-arm64.tar.gz.sha256` | Checksum of the above. |
+| `listnr-<version>.pkg` | Signed, notarized and **stapled** installer. The artefact for people who download in a browser. |
+
+Model weights are **not** bundled — they download on first use.
 
 Apple Silicon only, so there is one artefact and no universal binary. Listnr cannot run on Intel regardless of how it is built.
+
+## Code signing
+
+Releases are signed with a Developer ID and notarized. Four things about this are easy to get wrong:
+
+- **The hardened runtime is mandatory for notarization, and it blocks the microphone.** A hardened binary cannot open an input device unless it carries `com.apple.security.device.audio-input`, which is why [`Signing/listnr.entitlements`](../Signing/listnr.entitlements) exists. Without it Lane A is silently dead in a signed build — it starts fine and simply never hears you. The workflow asserts the entitlement is embedded rather than trusting that it was.
+- **A notarization ticket cannot be stapled to a bare binary or a tarball**, only to a `.pkg`, `.dmg` or `.app`. That is the entire reason a `.pkg` is built. The tarball's binary is notarized too, which makes Gatekeeper's *online* check pass, but it cannot be stapled — so an offline user who downloaded the tarball in a browser can still see a warning.
+- **Homebrew never trips Gatekeeper**, because it fetches over curl and curl does not set the quarantine attribute. The signing work matters for the browser-download path, not the `brew` path.
+- **The Developer ID G2 intermediate CA is not preinstalled on GitHub runners.** Without importing it, `codesign` fails with "unable to build chain to self-signed root" and produces no signature at all. Keychain Access installs it silently when you double-click a `.cer` locally, so this only ever breaks in CI. Its SHA-256 is pinned in the workflow.
+
+The formula bump is automated for a related reason: the formula now pins an exact release URL and checksum, and hand-copying a checksum is precisely where a release goes wrong.
+
+### Signing material
+
+[`Signing/setup-signing.sh`](../Signing/setup-signing.sh) generates the CSRs, pairs the downloaded certificates with the right private keys, builds the `.p12` bundles, and pushes every secret to the repository. Everything it writes lands in `Signing/private/`, which is gitignored.
+
+Eight repository secrets drive it: `MACOS_APP_CERT_P12`, `MACOS_INSTALLER_CERT_P12`, `MACOS_CERT_PASSWORD`, `MACOS_KEYCHAIN_PASSWORD`, `APPLE_TEAM_ID`, `NOTARY_KEY_P8`, `NOTARY_KEY_ID`, `NOTARY_ISSUER_ID`.
+
+Both certificates expire **2031-08-05**. Renewing them means reissuing at developer.apple.com and re-running `./Signing/setup-signing.sh`.
+
 
 ## Homebrew tap
 
@@ -67,21 +93,19 @@ decision is reversible by moving `Formula/listnr.rb` into a new tap repo.
 
 ### Per release
 
-Update two lines in [`Formula/listnr.rb`](../Formula/listnr.rb):
+Nothing to do by hand. The release workflow's final step rewrites `url`,
+`sha256` and `version` in [`Formula/listnr.rb`](../Formula/listnr.rb) and commits
+that to `main`. The checksum it uses is the **binary** tarball attached to the
+release, since that is what the formula installs.
 
-```ruby
-url "https://github.com/rokib16x/listnr/archive/refs/tags/vX.Y.Z.tar.gz"
-sha256 "..."   # the "Source SHA-256" from the release workflow summary
-```
-
-That is the checksum of GitHub's generated **source** tarball, not the binary
-attached to the release — the formula builds from source. To compute it by hand:
+If you ever need to reproduce it manually:
 
 ```sh
-curl -sL https://github.com/rokib16x/listnr/archive/refs/tags/vX.Y.Z.tar.gz | shasum -a 256
+V=0.1.2-beta
+curl -sL "https://github.com/rokib16x/listnr/releases/download/v$V/listnr-$V-macos-arm64.tar.gz" | shasum -a 256
 ```
 
-Verify before pushing, from a clone of this repo:
+Verify a release after the fact, from a clone of this repo:
 
 ```sh
 brew untap rokib16x/listnr 2>/dev/null
@@ -95,34 +119,48 @@ brew test rokib16x/listnr/listnr
 `brew audit --strict` is worth running every time; it caught three style
 violations and the `depends_on` ordering rule on the first pass.
 
-### Two things that only fail inside Homebrew's sandbox
+### Why the formula installs a binary rather than building
 
-Both are fixed in the formula and commented there, but they are the kind of
-thing that will bite again if the man-page step is ever rewritten:
+A source build took several minutes, because the dependency tree includes
+WhisperKit, swift-transformers and swift-crypto. It also discarded the signature:
+a locally compiled binary is unsigned no matter what the release ships. Installing
+the released artefact is seconds instead of minutes, and it is the same signed,
+notarized binary that was actually tested.
+
+The trade is that `brew install --HEAD` no longer works — a source build would
+need a second, separate install path in the formula. There is no `head` spec for
+that reason.
+
+### The man page still builds from source in CI
+
+The formula no longer compiles anything, but the **release workflow** does, and
+two SwiftPM sandbox quirks still apply there:
 
 - SwiftPM compiles the package manifest under `sandbox-exec`, which cannot nest
-  inside the sandbox Homebrew already applies. Without `--disable-sandbox` the
-  step dies with `sandbox_apply: Operation not permitted`. It still needs
-  `--allow-writing-to-directory` as well, and the two bind to different
-  subcommands, so placement matters.
+  inside another sandbox. `--disable-sandbox` and
+  `--allow-writing-to-directory` bind to different subcommands, so placement
+  matters.
 - `generate-manual` does not create its own output directory and exits 64 if it
   is missing.
 
-### Why build from source
+One ordering rule matters more than either: **the manual plugin builds the
+executable target**, so it has to run *before* the binary is signed. Signing
+first and generating the man page second silently overwrites the signature and
+ships an unsigned binary that still looks fine locally.
 
-No code signing or notarization is needed, because Homebrew does not apply the quarantine attribute to formula downloads. The cost is build time: the dependency tree includes WhisperKit, swift-transformers, and swift-crypto, so a clean install takes several minutes. If that becomes a complaint, the fix is bottles built by GitHub Actions in the tap repo, not signing.
+### What signing does and does not fix
 
-### On code signing
+It does **not** improve the permission story. macOS attaches microphone and
+Screen Recording grants to the *terminal application*, not to the `listnr`
+binary, so its signature is not what TCC keys on. And neither Homebrew nor
+`curl` sets the quarantine attribute, so neither ever showed a warning.
 
-Signing the CLI is **not** required and would not improve the permission story. macOS attaches microphone and Screen Recording grants to the *terminal application*, not to the `listnr` binary, so its signature is not what TCC keys on. Neither Homebrew nor `curl` sets the quarantine attribute.
+What it fixes is the browser download from the releases page, which *is*
+quarantined. That used to mean "developer cannot be verified" and a manual
+`xattr -dr com.apple.quarantine listnr`. The stapled `.pkg` removes it outright.
 
-The one path that needs it is a browser download from the releases page, which does get quarantined — hence "developer cannot be verified", cleared with:
-
-```sh
-xattr -dr com.apple.quarantine listnr
-```
-
-Signing and notarization become genuinely necessary for the menubar `.app` on the roadmap, where TCC does key on the bundle's signature.
+Signing also becomes unavoidable for the menubar `.app` on the roadmap, where TCC
+*does* key on the bundle's signature.
 
 ## Not doing yet
 
