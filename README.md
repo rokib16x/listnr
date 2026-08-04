@@ -110,6 +110,8 @@ Three commands rather than one, for two reasons. `brew tap` needs the explicit U
 
 This installs the prebuilt binary, so it takes seconds rather than the several minutes a source build spends compiling WhisperKit. You get the binary, a man page, and completions for bash, zsh, and fish.
 
+![Installing Listnr with Homebrew](demo/listnr-install.gif)
+
 ### Signed installer
 
 Download `listnr-<version>.pkg` from the [latest release](https://github.com/rokib16x/listnr/releases/latest) and open it. The package is signed with a Developer ID and notarized by Apple, so it installs without the "unidentified developer" warning. `listnr` goes to `/usr/local/bin`.

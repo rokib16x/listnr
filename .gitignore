@@ -28,3 +28,7 @@ manual/
 # notarization key, and the .p12 password. Committing any of it means revoking
 # the certificates and starting over. See Signing/setup-signing.sh.
 Signing/private/
+
+# asciinema captures are kept (they are text and re-renderable), but scratch
+# frames pulled out with ffmpeg are not
+demo/frames/
