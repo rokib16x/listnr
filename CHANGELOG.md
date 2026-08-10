@@ -8,6 +8,8 @@ While the version is `0.x`, the CLI surface may change in any minor release.
 
 ## [Unreleased]
 
+## [0.1.6-beta] - 2026-08-10
+
 ### Fixed
 
 - **Lane B captured digital silence, always, in every release so far.** The
