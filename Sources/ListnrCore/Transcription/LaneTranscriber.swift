@@ -127,11 +127,12 @@ final class LaneTranscriber {
                     )
                     let stamp = formatClock(segment.startSeconds)
                     let label = speakerLabel.padding(toLength: 8, withPad: " ", startingAt: 0)
-                    FileHandle.standardError.write(Data("[\(stamp)] \(label) \(text)\n".utf8))
+                    // Clears the level meter first: these lines arrive while it is
+                    // repainting in place, and without this the meter's tail is
+                    // left stitched onto the end of the transcript.
+                    TerminalLog.line("[\(stamp)] \(label) \(text)")
                 } catch {
-                    FileHandle.standardError.write(Data(
-                        "transcription error (\(speakerLabel)): \(error.localizedDescription)\n".utf8
-                    ))
+                    TerminalLog.line("transcription error (\(speakerLabel)): \(error.localizedDescription)")
                 }
             }
         }

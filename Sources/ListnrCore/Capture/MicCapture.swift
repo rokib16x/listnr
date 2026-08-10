@@ -222,10 +222,10 @@ final class MicCapture: @unchecked Sendable {
 
         guard recording else { return }
         guard attempt < Self.maxRebuilds else {
-            FileHandle.standardError.write(Data(
-                ("\r\u{001B}[K! mic device kept changing format; giving up after "
-                    + "\(Self.maxRebuilds) attempts. Try a wired or USB microphone.\n").utf8
-            ))
+            TerminalLog.line(
+                "! mic device kept changing format; giving up after "
+                    + "\(Self.maxRebuilds) attempts. Try a wired or USB microphone."
+            )
             return
         }
 
@@ -237,9 +237,7 @@ final class MicCapture: @unchecked Sendable {
         do {
             try buildEngine(resampler: resampler)
         } catch {
-            FileHandle.standardError.write(Data(
-                "\r\u{001B}[K! mic restart after device change failed: \(error.localizedDescription)\n".utf8
-            ))
+            TerminalLog.line("! mic restart after device change failed: \(error.localizedDescription)")
         }
     }
 
@@ -270,7 +268,7 @@ final class MicCapture: @unchecked Sendable {
         // place, so the line is cleared first (\r plus erase-to-end) or the meter
         // overwrites it on its next tick.
         if announce, let description = resampler.currentInputDescription {
-            FileHandle.standardError.write(Data("\r\u{001B}[K  mic format \(description)\n".utf8))
+            TerminalLog.line("  mic format \(description)")
         }
 
         onLevel?(AudioMath.rms(chunk))

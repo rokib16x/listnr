@@ -31,6 +31,18 @@ While the version is `0.x`, the CLI surface may change in any minor release.
   - `doctor` warns when the microphone grant exists but no device does. The
     permission alone says nothing about whether anything is plugged in.
 
+- **The level meter corrupted the live transcript on screen.** A line arriving
+  mid-tick came out as `[00:01] You      do both=0.000`, with the tail of
+  `sys=0.000` still attached to the text. The meter repaints in place — carriage
+  return, erase, no newline — so anything else written while it is on screen
+  lands inside its last paint.
+  - Writes that share the screen with the meter now clear the line first,
+    through a single `TerminalLog` helper rather than escape sequences copied
+    across five call sites. Two of those sites were already doing it by hand,
+    which is how the transcript line got missed.
+  - The saved `.md` was never affected, which is what made this look cosmetic
+    rather than like a corrupted transcript.
+
 ## [0.1.4-beta] - 2026-08-10
 
 ### Fixed

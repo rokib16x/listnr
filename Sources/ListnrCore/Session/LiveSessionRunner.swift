@@ -245,30 +245,28 @@ final class LiveSessionRunner: @unchecked Sendable {
             // said so, and telling someone to speak louder into hardware that is
             // not connected sends them to the wrong setting.
             if meterTicks == 6, !micSeen, !session.micUnavailable {
-                FileHandle.standardError.write(Data(
-                    "\n! mic still silent. Check System Settings → Sound → Input, and speak louder\n".utf8
-                ))
+                TerminalLog.line("! mic still silent. Check System Settings → Sound → Input, and speak louder")
             }
             // 10 s of total silence on the speaker lane. Either nothing is
             // playing, or the capture is not actually working — and the two are
             // indistinguishable from the meter alone, so say both.
             if meterTicks == 20, !sysSeen, captureSystemLane {
-                FileHandle.standardError.write(Data(
-                    ("\n! no system audio yet — remote voices will be missing.\n"
+                TerminalLog.line(
+                    "! no system audio yet — remote voices will be missing.\n"
                         + "  If someone is talking: System Settings → Privacy & Security →\n"
                         + "  Screen & System Audio Recording → enable your terminal, then RESTART it.\n"
-                        + "  macOS re-asks periodically, and a lapsed grant returns silence, not an error.\n").utf8
-                ))
+                        + "  macOS re-asks periodically, and a lapsed grant returns silence, not an error."
+                )
             }
             // Audible but too quiet to clear the segment floor. Left unsaid, this
             // looks like a transcription failure.
             if meterTicks == 40, micSeen, micPeak < youThreshold {
                 let note = String(
-                    format: "\n! mic peaked at %.3f but speech needs %.3f — most of your voice is being discarded.\n"
-                        + "  Raise System Settings → Sound → Input volume, or use /sensitivity high\n",
+                    format: "! mic peaked at %.3f but speech needs %.3f — most of your voice is being discarded.\n"
+                        + "  Raise System Settings → Sound → Input volume, or use /sensitivity high",
                     micPeak, youThreshold
                 )
-                FileHandle.standardError.write(Data(note.utf8))
+                TerminalLog.line(note)
             }
         }
         meter.resume()

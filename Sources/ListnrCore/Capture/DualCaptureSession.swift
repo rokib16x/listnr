@@ -115,10 +115,10 @@ final class DualCaptureSession {
             // Lane B alone still transcribes everyone else, which is most of the
             // value, so this degrades rather than refusing to record at all.
             micUnavailable = true
-            FileHandle.standardError.write(Data(
-                ("\r\u{001B}[K! no microphone found: nothing will be recorded for you.\n"
-                    + "  Capturing speaker audio only — remote voices will still be transcribed.\n").utf8
-            ))
+            TerminalLog.line(
+                "! no microphone found: nothing will be recorded for you.\n"
+                    + "  Capturing speaker audio only — remote voices will still be transcribed."
+            )
         } catch {
             _ = await system.stop()
             throw SessionError.mic(error)
