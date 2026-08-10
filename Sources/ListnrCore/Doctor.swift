@@ -21,53 +21,8 @@ enum DoctorReport {
             checkAppleSilicon(),
             checkMicrophone(),
             checkScreenRecording(),
-            checkSystemAudioOutput(device: OutputDevice.current()),
             checkHeadsetHint(),
         ]
-    }
-
-    /// Lane B depends on what the Mac is playing through, not only on the grant.
-    ///
-    /// A Bluetooth headset has been observed delivering a full session of silent
-    /// ScreenCaptureKit buffers: the stream starts, reports its duration, and
-    /// every sample is zero. Nothing in the grant or the model explains that, so
-    /// the transport is worth naming before a meeting rather than after.
-    ///
-    /// Deliberately a warning. Bluetooth output is not certain to break Lane B on
-    /// every Mac or every device, and blocking startup over a maybe would be
-    /// worse than the silence it guards against.
-    static func checkSystemAudioOutput(device: OutputDeviceInfo?) -> Check {
-        guard let device else {
-            return Check(
-                name: "system audio output",
-                status: .warn("no default output device found"),
-                remediation: "System Settings → Sound → Output → pick a device"
-            )
-        }
-
-        switch device.transport {
-        case .bluetooth:
-            return Check(
-                name: "system audio output",
-                status: .warn("\(device.name) is \(device.transport.label)"),
-                remediation: "Bluetooth output has been seen to give ScreenCaptureKit silent audio, "
-                    + "so remote voices go missing with no error. If Lane B is silent, switch "
-                    + "System Settings → Sound → Output to a built-in, wired, or USB device."
-            )
-        case .virtualDevice:
-            return Check(
-                name: "system audio output",
-                status: .warn("\(device.name) is \(device.transport.label)"),
-                remediation: "Loopback and aggregate devices can route speaker audio away from "
-                    + "ScreenCaptureKit. If Lane B is silent, select a physical output device."
-            )
-        case .builtIn, .usb, .airPlay, .other:
-            return Check(
-                name: "system audio output",
-                status: .ok,
-                remediation: nil
-            )
-        }
     }
 
     static func checkAppleSilicon() -> Check {

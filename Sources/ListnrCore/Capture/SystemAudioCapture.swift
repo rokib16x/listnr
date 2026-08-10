@@ -43,9 +43,8 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
     private var samples: [Float] = []
     private let stateLock = NSLock()
     private var recording = false
-    /// Touched only on `sampleQueue`.
-    private var converter: AVAudioConverter?
-    private var converterInputFormat: AVAudioFormat?
+    /// Touched only on `sampleQueue`, which ScreenCaptureKit serialises.
+    private lazy var resampler = ResampleCache(targetFormat: targetFormat)
     private var firstSampleHostSeconds: Double?
 
     var onLevel: ((Float) -> Void)?
@@ -95,8 +94,7 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
         sampleQueue.sync {
             samples.removeAll(keepingCapacity: true)
-            converter = nil
-            converterInputFormat = nil
+            resampler = ResampleCache(targetFormat: targetFormat)
             firstSampleHostSeconds = nil
         }
 
@@ -121,8 +119,6 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         stream = nil
 
         return sampleQueue.sync {
-            converter = nil
-            converterInputFormat = nil
             let captured = samples
             samples.removeAll(keepingCapacity: true)
             return captured
@@ -160,13 +156,12 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
     /// Convert one ScreenCaptureKit audio buffer to 16 kHz mono Float32.
     ///
-    /// Uses `AVAudioConverter` rather than hand-rolled interpolation. That
-    /// matters: decimating 48 kHz → 16 kHz is a 3:1 ratio, and without a
-    /// lowpass everything above 8 kHz folds back into the speech band as
-    /// aliasing distortion, degrading both Whisper's transcription and
-    /// SpeakerKit's embeddings, on the lane that carries every remote voice.
-    /// The converter also handles the stereo → mono downmix, so no channel is
-    /// silently discarded.
+    /// Resampling goes through `AVAudioConverter` rather than hand-rolled
+    /// interpolation. That matters: decimating 48 kHz to 16 kHz is a 3:1 ratio,
+    /// and without a lowpass everything above 8 kHz folds back into the speech
+    /// band as aliasing, degrading both Whisper's transcription and SpeakerKit's
+    /// embeddings on the lane that carries every remote voice. The converter also
+    /// handles the stereo to mono downmix, so no channel is discarded.
     ///
     /// Must run on `sampleQueue`.
     private func mono16k(from sampleBuffer: CMSampleBuffer) -> [Float]? {
@@ -176,42 +171,32 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
 
         var asbd = asbdPtr.pointee
         guard let inputFormat = AVAudioFormat(streamDescription: &asbd) else { return nil }
+        guard CMSampleBufferGetNumSamples(sampleBuffer) > 0 else { return nil }
 
-        let frames = CMSampleBufferGetNumSamples(sampleBuffer)
-        guard frames > 0 else { return nil }
+        // Ask how large the buffer list has to be before filling it. The stream is
+        // non-interleaved, so stereo arrives as two AudioBuffers, and a list sized
+        // for one makes the call fail outright rather than truncate.
+        var listSize = 0
+        guard CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
+            sampleBuffer,
+            bufferListSizeNeededOut: &listSize,
+            bufferListOut: nil,
+            bufferListSize: 0,
+            blockBufferAllocator: kCFAllocatorDefault,
+            blockBufferMemoryAllocator: kCFAllocatorDefault,
+            flags: 0,
+            blockBufferOut: nil
+        ) == noErr, listSize > 0 else { return nil }
 
-        if converter == nil || converterInputFormat != inputFormat {
-            converter = AVAudioConverter(from: inputFormat, to: targetFormat)
-            converterInputFormat = inputFormat
-            if converter == nil {
-                FileHandle.standardError.write(Data(
-                    "system audio: cannot convert \(inputFormat) to 16 kHz mono\n".utf8
-                ))
-                return nil
-            }
-        }
-        guard let converter else { return nil }
-
-        guard let inBuffer = AVAudioPCMBuffer(
-            pcmFormat: inputFormat,
-            frameCapacity: AVAudioFrameCount(frames)
-        ) else { return nil }
-        inBuffer.frameLength = AVAudioFrameCount(frames)
-
-        // Point the PCM buffer's AudioBufferList at the sample buffer's data
-        // instead of copying. `blockBuffer` owns that memory, so it has to stay
-        // alive for as long as `inBuffer` is read, hence withExtendedLifetime
-        // around the conversion below.
-        let audioBufferList = inBuffer.mutableAudioBufferList
-        guard audioBufferList.pointee.mNumberBuffers > 0 else { return nil }
-        let listSize = MemoryLayout<AudioBufferList>.size
-            + Int(audioBufferList.pointee.mNumberBuffers - 1) * MemoryLayout<AudioBuffer>.size
+        let storage = UnsafeMutableRawPointer.allocate(byteCount: listSize, alignment: 16)
+        defer { storage.deallocate() }
+        let listPtr = storage.bindMemory(to: AudioBufferList.self, capacity: 1)
 
         var blockBuffer: CMBlockBuffer?
         let status = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
             sampleBuffer,
             bufferListSizeNeededOut: nil,
-            bufferListOut: audioBufferList,
+            bufferListOut: listPtr,
             bufferListSize: listSize,
             blockBufferAllocator: kCFAllocatorDefault,
             blockBufferMemoryAllocator: kCFAllocatorDefault,
@@ -220,29 +205,23 @@ final class SystemAudioCapture: NSObject, SCStreamOutput, SCStreamDelegate {
         )
         guard status == noErr, blockBuffer != nil else { return nil }
 
+        // `blockBuffer` owns the samples, so it has to outlive every read of the
+        // wrapper below.
         return withExtendedLifetime(blockBuffer) { () -> [Float]? in
-            let ratio = Self.targetSampleRate / inputFormat.sampleRate
-            let capacity = AVAudioFrameCount(Double(frames) * ratio) + 1024
-            guard let outBuffer = AVAudioPCMBuffer(
-                pcmFormat: targetFormat,
-                frameCapacity: capacity
+            // Wrap the filled list. This must not be an AVAudioPCMBuffer created
+            // with `frameCapacity:` whose `mutableAudioBufferList` is then pointed
+            // at the block buffer: rewriting those `mData` pointers does not change
+            // what `floatChannelData` returns, and `floatChannelData` is what
+            // AVAudioConverter reads. That combination converted the buffer's own
+            // untouched allocation on every call, so Lane B produced digital
+            // silence — full duration, no error, no remote speaker ever
+            // transcribed. `bufferListNoCopy:` is the initialiser meant for this.
+            guard let inBuffer = AVAudioPCMBuffer(
+                pcmFormat: inputFormat,
+                bufferListNoCopy: listPtr
             ) else { return nil }
 
-            let feed = ConverterFeed(inBuffer)
-            var error: NSError?
-            let result = converter.convert(to: outBuffer, error: &error, withInputFrom: feed.inputBlock)
-            guard result != .error, let channelData = outBuffer.floatChannelData else {
-                if let error {
-                    FileHandle.standardError.write(Data(
-                        "system audio convert failed: \(error.localizedDescription)\n".utf8
-                    ))
-                }
-                return nil
-            }
-
-            let count = Int(outBuffer.frameLength)
-            guard count > 0 else { return nil }
-            return Array(UnsafeBufferPointer(start: channelData[0], count: count))
+            return resampler.resample(inBuffer)
         }
     }
 }

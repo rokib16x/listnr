@@ -112,19 +112,19 @@ error when the grant has lapsed, so the session starts, runs, and reports
 If you switched terminals (Terminal → iTerm, or started using Ghostty for the
 Bangla rendering), the new one needs its own grant.
 
-**If the grant is definitely in place, check what you are listening through.**
-`listnr doctor` names it:
+**If the grant is definitely in place and Lane B is still silent, check your
+version.** Every release up to and including 0.1.5-beta captured digital silence
+on the speaker lane, always, on every machine and every output device. A session
+would report `sys=243.9s` of captured audio measuring -91 dB, with no error and no
+remote speaker in the transcript. Fixed in the release after 0.1.5-beta:
 
-```text
-! system audio output: FiascoPods is Bluetooth
+```sh
+brew upgrade listnr && listnr --version
 ```
 
-Bluetooth output has been observed handing ScreenCaptureKit silent buffers — the
-stream starts, reports a duration, and every sample is zero. Aggregate and
-virtual devices, the kind loopback tools install, can route speaker audio away
-from the tap in the same way. Set System Settings → Sound → Output to a built-in,
-wired, or USB device and run the 15-second test again. If `sys=` moves, that was
-it, and you will need non-Bluetooth output for meetings you want transcribed.
+Note that output over Bluetooth is fine. An earlier version of this page and a
+`doctor` warning in 0.1.4-beta claimed Bluetooth output could cause the silence.
+That was a misdiagnosis on the way to the real bug, and both have been removed.
 
 ## Words go missing in the middle of a conversation
 

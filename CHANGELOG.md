@@ -8,6 +8,39 @@ While the version is `0.x`, the CLI surface may change in any minor release.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Lane B captured digital silence, always, in every release so far.** The
+  speaker lane is the reason this tool exists, and it never once recorded
+  anything. Sessions reported minutes of system audio, ScreenCaptureKit raised no
+  error, and no remote speaker was ever transcribed. A dumped `listnr-sys.wav`
+  measured **-91 dB** — pure zeros — while music played.
+  - `CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer` fills an
+    `AudioBufferList` with pointers into a `CMBlockBuffer`. The old code created
+    an `AVAudioPCMBuffer` with `frameCapacity:` and handed that buffer's
+    `mutableAudioBufferList` over to be filled. But rewriting those `mData`
+    pointers does not change what `floatChannelData` returns, and
+    `floatChannelData` is what `AVAudioConverter` reads — so every conversion
+    read the buffer's own untouched, zeroed allocation. Measured directly: the
+    raw list peaked at 0.062 while the same buffer read 0.000 through the PCM
+    wrapper.
+  - Fixed by wrapping the filled list with `AVAudioPCMBuffer(pcmFormat:
+    bufferListNoCopy:)`, the initialiser meant for exactly this, and by asking
+    for the list size instead of assuming one `AudioBuffer` — the stream is
+    non-interleaved, so stereo arrives as two.
+  - Verified end to end on Bluetooth output: `sys=0.038` on the meter, a dumped
+    WAV at -28.3 dB, and for the first time an `Others:` line in a transcript.
+  - Both lanes now share `ResampleCache`, so this cannot diverge again.
+
+### Removed
+
+- **The Bluetooth output warning added in 0.1.4-beta, which was wrong.** It
+  claimed Bluetooth output could make ScreenCaptureKit return silence. It cannot;
+  that silence was the bug above, on every device equally. The warning and the
+  output-transport probe behind it are gone rather than left to send people to a
+  setting that was never the problem. The matching troubleshooting section has
+  been corrected too.
+
 ## [0.1.5-beta] - 2026-08-10
 
 ### Fixed
