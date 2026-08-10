@@ -8,6 +8,8 @@ While the version is `0.x`, the CLI surface may change in any minor release.
 
 ## [Unreleased]
 
+## [0.1.4-beta] - 2026-08-10
+
 ### Fixed
 
 - **The microphone lane captured nothing at all on a Bluetooth headset.** A

@@ -8,4 +8,4 @@ import Foundation
 /// heading all agree — a tag that disagrees with what `listnr --version` prints
 /// is the kind of thing nobody notices until someone files a bug against the
 /// wrong release.
-public let listnrVersion = "0.1.3-beta"
+public let listnrVersion = "0.1.4-beta"
