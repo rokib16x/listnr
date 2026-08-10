@@ -15,6 +15,38 @@ Whisper heard you and the confidence gate rejected the result. If it fires on sp
 
 If there is no such line and the level meter shows `mic=0.000`, it is the microphone, not the transcription. Check System Settings → Sound → Input, and run `listnr doctor`.
 
+## Nothing from you at all (`mic=0.0s`)
+
+Different from a quiet microphone, and worth telling apart:
+
+```text
+○ captured  wall=64.8s  mic=0.0s  sys=65.6s
+```
+
+`mic=0.0s` is **zero samples**, not quiet ones. No sensitivity setting can help,
+because there is no audio to threshold. If the mic were merely quiet you would
+see a real duration with low levels, like `mic=64.7s` at `0.017`.
+
+On a Bluetooth headset this used to be a Listnr bug, fixed in the version after
+0.1.3-beta. AirPods idle in an output-only profile at 48 kHz and only switch to
+their 24 kHz hands-free profile once something opens the input — which is the act
+of starting a session. Listnr installed its tap at the old rate and never
+received a buffer. It now rebuilds the audio engine when the device changes
+format, and reports the rate it is actually converting:
+
+```text
+  mic format 24000 Hz · 1 ch
+```
+
+If you still see `mic=0.0s` on a current build:
+
+1. Check the microphone grant belongs to **the terminal you launch from**, not a
+   different one: `listnr doctor`.
+2. Confirm the device works outside Listnr — System Settings → Sound → Input and
+   watch the **Input level** meter while you speak. If those bars stay flat, the
+   problem is the device or macOS, not Listnr.
+3. Try a wired or USB microphone. Bluetooth headsets are the fragile case.
+
 ## The transcript has gaps — minutes of speech missing
 
 Look at the level meter while you talk:
@@ -79,6 +111,20 @@ error when the grant has lapsed, so the session starts, runs, and reports
 
 If you switched terminals (Terminal → iTerm, or started using Ghostty for the
 Bangla rendering), the new one needs its own grant.
+
+**If the grant is definitely in place, check what you are listening through.**
+`listnr doctor` names it:
+
+```text
+! system audio output: FiascoPods is Bluetooth
+```
+
+Bluetooth output has been observed handing ScreenCaptureKit silent buffers — the
+stream starts, reports a duration, and every sample is zero. Aggregate and
+virtual devices, the kind loopback tools install, can route speaker audio away
+from the tap in the same way. Set System Settings → Sound → Output to a built-in,
+wired, or USB device and run the 15-second test again. If `sys=` moves, that was
+it, and you will need non-Bluetooth output for meetings you want transcribed.
 
 ## Words go missing in the middle of a conversation
 

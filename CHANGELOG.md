@@ -8,6 +8,44 @@ While the version is `0.x`, the CLI surface may change in any minor release.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The microphone lane captured nothing at all on a Bluetooth headset.** A
+  session on AirPods reported `mic=0.0s`: not quiet audio, zero samples, for its
+  entire duration. Every local utterance was lost and the only clue on screen
+  was a confident `mic format 48000 Hz` for hardware that runs at 24 kHz.
+  - `AVAudioEngine` reports the input format before a Bluetooth device switches
+    profile. AirPods idle in an output-only profile at 48 kHz, and opening the
+    input is itself what forces the 24 kHz hands-free profile — so the tap went
+    in at 48 kHz, the hardware moved underneath it, and the tap never delivered
+    another buffer. Measured: zero buffers after four seconds.
+  - Reinstalling the tap on `AVAudioEngineConfigurationChange` does not recover
+    it. Only a new `AVAudioEngine` does, so that is what now happens, bounded to
+    four rebuilds so a device flapping between profiles terminates.
+  - The reported format now comes from the first buffer that actually arrived,
+    so the number on screen is one that was observed rather than assumed.
+  - Verified cold across three runs on a 24 kHz headset: `mic=7.5s` over an 8s
+    session, levels 0.032–0.115 against an 0.018 floor. `--sensitivity high` is
+    no longer needed for this hardware.
+
+### Added
+
+- **`doctor` now names the output device's transport.** ScreenCaptureKit can
+  return a whole session of silent buffers without an error — the stream starts,
+  reports its duration, and every sample is zero, which looks like a
+  transcription problem and is not one. Bluetooth output has been observed doing
+  exactly that, so `doctor` warns when the default output is Bluetooth, and also
+  when it is an aggregate or virtual device of the kind loopback tools install.
+  A warning rather than a failure: it is not certain to break Lane B on every
+  Mac, and blocking a meeting over a maybe would be worse than the silence.
+
+### Changed
+
+- Microphone resampling moved into `ResampleCache`, which derives the input
+  format from each buffer instead of predicting it, and keeps the converter
+  across buffers so its filter state is not discarded every 4096 frames. The
+  system-audio lane already worked this way.
+
 ## [0.1.3-beta] - 2026-08-04
 
 ### Added
