@@ -87,10 +87,23 @@ enum DoctorReport {
         )
     }
 
-    static func checkMicrophone() -> Check {
+    static func checkMicrophone(hasDevice: Bool = AudioDevices.hasInputDevice()) -> Check {
         let status = AVCaptureDevice.authorizationStatus(for: .audio)
         switch status {
         case .authorized:
+            // Granted access to a microphone that is not there. A Mac mini or
+            // Studio has no built-in mic, so an unpaired headset leaves nothing
+            // for Lane A to record, and the permission says nothing about it.
+            // A warning, not a failure: capturing only the speaker lane is still
+            // a useful thing to do.
+            guard hasDevice else {
+                return Check(
+                    name: "microphone",
+                    status: .warn("granted, but no input device is connected"),
+                    remediation: "Nothing will be recorded for you (Lane A). Connect a microphone or headset, "
+                        + "then check System Settings → Sound → Input."
+                )
+            }
             return Check(name: "microphone", status: .ok, remediation: nil)
         case .notDetermined:
             return Check(

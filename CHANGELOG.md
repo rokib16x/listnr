@@ -8,6 +8,29 @@ While the version is `0.x`, the CLI surface may change in any minor release.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Starting a session with no microphone connected killed the process.** A Mac
+  mini or Studio has no built-in microphone, so an AirPods disconnect leaves the
+  machine with no input device at all, and the session aborted on a CoreAudio
+  assertion (`format.sampleRate == inputHWFormat.sampleRate`) rather than saying
+  what to plug in. Both `installTap` and `AVAudioEngine.start()` raise
+  Objective-C exceptions in that state and neither can be caught from Swift, so
+  the process took SIGABRT. This predates 0.1.4-beta; only the exception's origin
+  moved.
+  - The route in was a fallback that read the input node's *output* format when
+    its input format was empty. With nothing attached the input side reads
+    0 Hz / 0 ch while the output side still reads a plausible 44.1 kHz stereo, so
+    the guard passed on a number unrelated to any input hardware. There is no
+    output-format fallback now — it can only mislead.
+  - A session missing only its microphone degrades to speaker-only instead of
+    refusing to run, since Lane B alone still transcribes everyone else.
+  - "mic still silent, speak louder" is suppressed when no microphone is
+    connected, because advising someone to talk louder into absent hardware
+    points at the wrong setting.
+  - `doctor` warns when the microphone grant exists but no device does. The
+    permission alone says nothing about whether anything is plugged in.
+
 ## [0.1.4-beta] - 2026-08-10
 
 ### Fixed

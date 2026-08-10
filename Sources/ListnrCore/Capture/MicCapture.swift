@@ -16,12 +16,14 @@ final class MicCapture: @unchecked Sendable {
     enum CaptureError: Error, LocalizedError {
         case engineStartFailed(Error)
         case converterCreationFailed
+        case noInputDevice
         case invalidInputFormat
 
         var errorDescription: String? {
             switch self {
             case .engineStartFailed(let e): return "mic engine start failed: \(e.localizedDescription)"
             case .converterCreationFailed: return "mic converter creation failed"
+            case .noInputDevice: return "no microphone found. This Mac has no built-in mic, or the one you were using disconnected. Connect a mic and check System Settings → Sound → Input"
             case .invalidInputFormat: return "mic input format invalid (0 channels / rate). Check System Settings → Sound → Input"
             }
         }
@@ -149,22 +151,36 @@ final class MicCapture: @unchecked Sendable {
         let input = engine.inputNode
         engine.prepare()
 
-        // Advisory only, to fail early when there is genuinely no input device.
-        // Deliberately not used as the tap format: a Bluetooth headset sitting in
-        // its output-only profile reports the stale rate here (48 kHz for a
-        // device that will run at 24 kHz once the input opens), and a tap
+        // Advisory only, and never used as the tap format: a Bluetooth headset
+        // sitting in its output-only profile reports a stale rate here (48 kHz
+        // for a device that will run at 24 kHz once the input opens), and a tap
         // installed against a format the hardware disagrees with delivers nothing
         // at all, silently. That produced whole sessions of `mic=0.0s`.
+        //
+        // What it *is* good for is refusing to continue when there is no input
+        // device, which on a Mac with no built-in microphone is what happens the
+        // moment a headset disconnects. Both installing a tap and starting the
+        // engine raise Objective-C exceptions in that state, and those cannot be
+        // caught from Swift — the process dies with SIGABRT and a CoreAudio
+        // message instead of saying which cable to plug in.
         let advertised = input.inputFormat(forBus: 0)
-        let fallback = input.outputFormat(forBus: 0)
         if ProcessInfo.processInfo.environment["LISTNR_DEBUG_MIC"] != nil {
+            let fallback = input.outputFormat(forBus: 0)
             FileHandle.standardError.write(Data(String(
                 format: "  [debug] inputFormat %.0f Hz %d ch · outputFormat %.0f Hz %d ch\n",
                 advertised.sampleRate, advertised.channelCount,
                 fallback.sampleRate, fallback.channelCount
             ).utf8))
         }
-        guard advertised.sampleRate >= 1000 || fallback.sampleRate >= 1000 else {
+        // Deliberately not falling back to the node's *output* format when the
+        // input one is empty. That fallback is what let this reach the crash: with
+        // no microphone attached the input side reads 0 Hz / 0 ch while the output
+        // side still reads a plausible 44.1 kHz stereo, so the guard passed on a
+        // number that had nothing to do with any input hardware.
+        guard AudioDevices.hasInputDevice() else {
+            throw CaptureError.noInputDevice
+        }
+        guard advertised.channelCount > 0, advertised.sampleRate >= 1000 else {
             throw CaptureError.invalidInputFormat
         }
 

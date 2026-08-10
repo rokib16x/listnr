@@ -241,7 +241,10 @@ final class LiveSessionRunner: @unchecked Sendable {
             meterTicks += 1
             let line = String(format: "  levels  mic=%.3f  sys=%.3f\u{001B}[K\r", lastMic, lastSys)
             FileHandle.standardError.write(Data(line.utf8))
-            if meterTicks == 6, !micSeen {
+            // Suppressed when there is no microphone at all: the session already
+            // said so, and telling someone to speak louder into hardware that is
+            // not connected sends them to the wrong setting.
+            if meterTicks == 6, !micSeen, !session.micUnavailable {
                 FileHandle.standardError.write(Data(
                     "\n! mic still silent. Check System Settings → Sound → Input, and speak louder\n".utf8
                 ))

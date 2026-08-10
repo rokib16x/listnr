@@ -52,6 +52,10 @@ final class DualCaptureSession {
     private var startedAt: Date?
     private var running = false
 
+    /// Set when the session started without a microphone, so callers can stop
+    /// advising someone to speak up into hardware that is not there.
+    private(set) var micUnavailable = false
+
     var onMicLevel: ((Float) -> Void)? {
         get { mic.onLevel }
         set { mic.onLevel = newValue }
@@ -106,6 +110,15 @@ final class DualCaptureSession {
 
         do {
             try mic.start()
+        } catch MicCapture.CaptureError.noInputDevice {
+            // A Mac with no built-in microphone, after a headset disconnected.
+            // Lane B alone still transcribes everyone else, which is most of the
+            // value, so this degrades rather than refusing to record at all.
+            micUnavailable = true
+            FileHandle.standardError.write(Data(
+                ("\r\u{001B}[K! no microphone found: nothing will be recorded for you.\n"
+                    + "  Capturing speaker audio only — remote voices will still be transcribed.\n").utf8
+            ))
         } catch {
             _ = await system.stop()
             throw SessionError.mic(error)
