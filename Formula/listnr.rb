@@ -23,8 +23,8 @@ class Listnr < Formula
   #
   # There is deliberately no `version`: Homebrew scans it out of the URL, and
   # `brew audit --strict` rejects an explicit one as redundant.
-  url "https://github.com/rokib16x/listnr/releases/download/v0.1.5-beta/listnr-0.1.5-beta-macos-arm64.tar.gz"
-  sha256 "4a56496ca948fbb8ceb4b4ae94e93864002a3aa4ea94da41e67c5fe0b9fbbb16"
+  url "https://github.com/rokib16x/listnr/releases/download/v0.1.6-beta/listnr-0.1.6-beta-macos-arm64.tar.gz"
+  sha256 "3a13bf3d0a81733241f0c1a85b13b3461087509e56731cd512929c6543095698"
   license "MIT"
 
   # Both are hard requirements, not preferences. Listnr runs Whisper on the
