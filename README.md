@@ -14,12 +14,27 @@ Speak English, Bangla, Hindi, Spanish, French, German, Japanese, or Chinese, and
 
 *Verbatim output from a real session, replayed for the recording. Nothing was cleaned up. `You` is the microphone lane, identified by which wire the audio arrived on, so it cannot be misattributed. `Speaker 1` and `Speaker 2` share the single speaker-output lane and are split apart by diarization once the session ends. [How this was recorded](demo/README.md).*
 
+## Quick start
+
 ```sh
 brew tap rokib16x/listnr https://github.com/rokib16x/listnr
 brew trust --tap rokib16x/listnr
 brew install listnr
-listnr setup && listnr
+listnr setup
 ```
+
+Then **quit your terminal completely (⌘Q) and reopen it.** This step is not optional:
+
+```sh
+listnr doctor && listnr
+```
+
+macOS attaches the Screen Recording permission to your *terminal application*, and it only takes effect for processes started afterwards. Granting it and running straight on in the same session leaves the speaker lane silent — you get a transcript with only your own voice and no error explaining why. `listnr doctor` confirms both grants landed before you spend a meeting finding out.
+
+Two things worth knowing before the first run:
+
+- **macOS 14+ on Apple Silicon**, and nothing else. Homebrew refuses to install on Intel or on older macOS rather than failing later.
+- **Speech models download on first use**, not during install: 139 MB for English, up to about 1.5 GB for the multilingual models. Fetch one ahead of a call with `listnr models download whisper-base.en`.
 
 ---
 
@@ -41,7 +56,7 @@ It is a CLI because that is what I needed first. A menubar app is on the roadmap
 
 ## Status: beta
 
-Listnr is at **`0.1.3-beta`**. The core pipeline works and produces transcripts I rely on, but this is early software with one maintainer, and the CLI may change in any `0.x` release.
+Listnr is at **`0.1.6-beta`**. The core pipeline works and produces transcripts I rely on, but this is early software with one maintainer, and the CLI may change in any `0.x` release.
 
 These are all known. Please read before filing an issue:
 
@@ -53,7 +68,7 @@ These are all known. Please read before filing an issue:
 | **Translation is English-only and one-way** | `/translate` uses Whisper's own task, which only targets English. No Bangla → Hindi, and the original wording is not kept alongside it. |
 | **Voice detection thresholds are absolute** | Speech detection uses absolute RMS, so a very quiet or very hot mic needs `/sensitivity high` or `low`. Auto-calibration is planned. |
 | **Settings do not persist** | `/lang`, `/model`, `/speakers`, `/diarize`, `/translate`, and `/dump` all reset when you quit. |
-| **The capture layer has no automated tests** | 147 unit tests cover the pure logic. Anything touching real hardware is verified manually. |
+| **The capture layer is only partly tested** | 172 unit tests cover the pure logic, plus buffer wrapping and resampling for both lanes. Anything needing a real device or a live ScreenCaptureKit stream is still verified by hand — that gap is how the speaker lane shipped silent for five releases. |
 | **No GUI** | CLI only for now. |
 
 Found something not on this list? [Open an issue](https://github.com/rokib16x/listnr/issues/new/choose).
@@ -125,7 +140,7 @@ Download `listnr-<version>.pkg` from the [latest release](https://github.com/rok
 Apple Silicon only. Each [release](https://github.com/rokib16x/listnr/releases) ships the binary, shell completions, and a man page.
 
 ```sh
-V=0.1.3-beta
+V=0.1.6-beta
 curl -LO "https://github.com/rokib16x/listnr/releases/download/v$V/listnr-$V-macos-arm64.tar.gz"
 tar -xzf "listnr-$V-macos-arm64.tar.gz"
 sudo cp "listnr-$V-macos-arm64/listnr" /usr/local/bin/listnr
@@ -135,11 +150,10 @@ The binary is signed and notarized, but a notarization ticket cannot be stapled 
 
 While Listnr is a `0.x` prerelease, the URL needs the explicit tag. GitHub's `/releases/latest/` excludes prereleases and will 404.
 
-If you download it through a browser instead of `curl`, macOS quarantines it and refuses to run it. Clear that with `xattr -dr com.apple.quarantine listnr`.
 
 ### From source
 
-Needs Xcode 15 or later (Swift 5.9+). Homebrew builds from source too, so either way the first install takes a few minutes.
+Needs Xcode 15 or later (Swift 5.9+). This is the slow path — it compiles WhisperKit, which takes several minutes. Homebrew installs the prebuilt signed binary instead, so use that unless you are changing the code.
 
 ```sh
 git clone https://github.com/rokib16x/listnr.git
@@ -162,9 +176,11 @@ Listnr needs two permissions, and macOS attaches both to your **terminal applica
 | **Microphone** | Lane A, your voice |
 | **Screen & System Audio Recording** | Lane B, the speaker output, which is everyone else |
 
-Two things follow. Switching from Terminal to iTerm means granting them again, and macOS usually needs the Settings toggle plus a relaunch. `brew upgrade` will *not* re-prompt. `listnr doctor` tells you which one is missing.
+Two things follow from that. Switching from Terminal to iTerm means granting both again, and **a new grant only applies to processes started after it** — so quit the terminal with ⌘Q and reopen it, rather than just opening a new tab. `brew upgrade` will *not* re-prompt. `listnr doctor` tells you which one is missing.
 
-Both are required to start; there is no microphone-only mode, because a meeting transcript without the other side is not one.
+Screen Recording is required. Listnr will not start without it, because a meeting transcript with only your own voice in it is not one.
+
+The microphone is not strictly required. A Mac mini or Studio has no built-in mic, so an unpaired headset leaves nothing to record on Lane A — rather than refuse, Listnr says so and captures the speaker lane alone, which still transcribes everyone else.
 
 The Screen Recording permission is how macOS gates system audio through ScreenCaptureKit. Listnr asks for a 2x2 pixel video stream it never reads, purely because the API insists on one. **No screen content is captured, stored, or transmitted.** See [`SystemAudioCapture.swift`](Sources/ListnrCore/Capture/SystemAudioCapture.swift).
 

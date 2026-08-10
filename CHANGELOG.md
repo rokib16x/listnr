@@ -12,11 +12,15 @@ While the version is `0.x`, the CLI surface may change in any minor release.
 
 ### Fixed
 
-- **Lane B captured digital silence, always, in every release so far.** The
-  speaker lane is the reason this tool exists, and it never once recorded
-  anything. Sessions reported minutes of system audio, ScreenCaptureKit raised no
-  error, and no remote speaker was ever transcribed. A dumped `listnr-sys.wav`
-  measured **-91 dB** — pure zeros — while music played.
+- **Lane B captured digital silence in 0.1.1-beta through 0.1.5-beta.** The
+  speaker lane is the reason this tool exists, and for five releases it recorded
+  nothing at all. Sessions reported minutes of system audio, ScreenCaptureKit
+  raised no error, and no remote speaker was ever transcribed. A dumped
+  `listnr-sys.wav` measured **-91 dB** — pure zeros — while music played.
+  - It worked in 0.1.0-beta, which read the `CMBlockBuffer` data pointer
+    directly. The regression arrived with the commit that replaced that read with
+    `AVAudioConverter` to stop 3:1 downsampling from aliasing — a real problem,
+    fixed in a way that silently discarded the audio it was meant to improve.
   - `CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer` fills an
     `AudioBufferList` with pointers into a `CMBlockBuffer`. The old code created
     an `AVAudioPCMBuffer` with `frameCapacity:` and handed that buffer's

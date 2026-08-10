@@ -113,8 +113,8 @@ If you switched terminals (Terminal → iTerm, or started using Ghostty for the
 Bangla rendering), the new one needs its own grant.
 
 **If the grant is definitely in place and Lane B is still silent, check your
-version.** Every release up to and including 0.1.5-beta captured digital silence
-on the speaker lane, always, on every machine and every output device. A session
+version.** Releases 0.1.1-beta through 0.1.5-beta captured digital silence on the
+speaker lane, on every machine and every output device. A session
 would report `sys=243.9s` of captured audio measuring -91 dB, with no error and no
 remote speaker in the transcript. Fixed in the release after 0.1.5-beta:
 
