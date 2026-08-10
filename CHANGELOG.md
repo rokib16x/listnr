@@ -8,6 +8,8 @@ While the version is `0.x`, the CLI surface may change in any minor release.
 
 ## [Unreleased]
 
+## [0.1.5-beta] - 2026-08-10
+
 ### Fixed
 
 - **Starting a session with no microphone connected killed the process.** A Mac
