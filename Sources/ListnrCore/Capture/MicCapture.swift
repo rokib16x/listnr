@@ -4,7 +4,15 @@
 import Foundation
 
 /// Lane A, the microphone. Captures 16 kHz mono Float32 while running.
-final class MicCapture {
+///
+/// `@unchecked Sendable` because macOS delivers the engine's configuration-change
+/// notification on an arbitrary thread, so this type has to be safe to touch from
+/// one. Two locks keep that sound, and they are never held at the same time:
+/// `engineLock` covers the engine and its tap, `lock` covers the captured
+/// samples. Taking them in one order only would still deadlock here, because
+/// `removeTap` blocks until in-flight tap callbacks return and those callbacks
+/// take `lock` — so a rebuild must never hold `lock`.
+final class MicCapture: @unchecked Sendable {
     enum CaptureError: Error, LocalizedError {
         case engineStartFailed(Error)
         case converterCreationFailed
@@ -21,17 +29,35 @@ final class MicCapture {
 
     static let targetSampleRate: Double = 16_000
 
+    /// How many times the engine may be rebuilt in one session before giving up.
+    ///
+    /// A device that flaps between profiles would otherwise rebuild forever. Four
+    /// is well above the one rebuild a Bluetooth headset needs, while still
+    /// terminating.
+    private static let maxRebuilds = 4
+
+    private let engineLock = NSLock()
     private var engine = AVAudioEngine()
-    private var converter: AVAudioConverter?
-    private var samples: [Float] = []
+    private var observer: NSObjectProtocol?
+    private var rebuilds = 0
     private var isRecording = false
-    private var firstSampleHostSeconds: Double?
+
     private let lock = NSLock()
+    private var resampler: ResampleCache?
+    private var samples: [Float] = []
+    private var firstSampleHostSeconds: Double?
+    /// Whether the input format has been reported. Reset on rebuild, so a device
+    /// that changes format mid-session says so.
+    private var announcedFormat = false
 
     var onLevel: ((Float) -> Void)?
     var onSamples: (([Float]) -> Void)?
 
-    var isRunning: Bool { isRecording }
+    var isRunning: Bool {
+        engineLock.lock()
+        defer { engineLock.unlock() }
+        return isRecording
+    }
 
     /// Host-clock time of the first captured sample, or nil if nothing arrived.
     /// Used to place this lane on the shared session timeline.
@@ -42,45 +68,121 @@ final class MicCapture {
     }
 
     func start() throws {
-        guard !isRecording else { return }
+        engineLock.lock()
+        let alreadyRunning = isRecording
+        engineLock.unlock()
+        guard !alreadyRunning else { return }
 
-        // Fresh engine after long model loads / prior sessions.
-        if engine.isRunning {
-            engine.stop()
-            engine.inputNode.removeTap(onBus: 0)
-        }
-        engine = AVAudioEngine()
-
-        let input = engine.inputNode
-        // Prefer hardware input format after graph exists.
-        engine.prepare()
-        var inputFormat = input.inputFormat(forBus: 0)
-        if inputFormat.channelCount == 0 || inputFormat.sampleRate < 1000 {
-            inputFormat = input.outputFormat(forBus: 0)
-        }
-        guard inputFormat.channelCount > 0, inputFormat.sampleRate >= 1000 else {
-            throw CaptureError.invalidInputFormat
-        }
-
-        let targetFormat = AVAudioFormat(
+        guard let targetFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: MicCapture.targetSampleRate,
             channels: 1,
             interleaved: false
-        )!
-
-        guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+        ) else {
             throw CaptureError.converterCreationFailed
         }
-        self.converter = converter
+
+        // One cache for the whole session, including across rebuilds: it derives
+        // the input format from each buffer, so a device that switches from
+        // 48 kHz to 24 kHz mid-session is handled without losing the lane.
+        let resampler = ResampleCache(targetFormat: targetFormat)
 
         lock.lock()
+        self.resampler = resampler
         samples.removeAll(keepingCapacity: true)
         firstSampleHostSeconds = nil
+        announcedFormat = false
         lock.unlock()
 
-        input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, when in
-            self?.process(buffer: buffer, when: when, converter: converter, targetFormat: targetFormat)
+        engineLock.lock()
+        rebuilds = 0
+        engineLock.unlock()
+
+        try buildEngine(resampler: resampler)
+
+        engineLock.lock()
+        isRecording = true
+        engineLock.unlock()
+    }
+
+    @discardableResult
+    func stop() -> [Float] {
+        engineLock.lock()
+        guard isRecording else {
+            engineLock.unlock()
+            return []
+        }
+        isRecording = false
+        // Detached before tearing the engine down, so the stop itself cannot
+        // trigger a rebuild.
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
+            self.observer = nil
+        }
+        engine.stop()
+        engine.inputNode.removeTap(onBus: 0)
+        engineLock.unlock()
+
+        lock.lock()
+        resampler = nil
+        let captured = samples
+        samples.removeAll(keepingCapacity: true)
+        lock.unlock()
+        return captured
+    }
+
+    // MARK: - Engine lifecycle
+
+    /// Stand up a fresh engine with a tap on the input node.
+    ///
+    /// Always a new `AVAudioEngine`. Reusing one across a device format change
+    /// does not work: the engine keeps reporting the pre-change format and its
+    /// tap never delivers another buffer, even if the tap is reinstalled.
+    private func buildEngine(resampler: ResampleCache) throws {
+        engineLock.lock()
+        defer { engineLock.unlock() }
+
+        engine.stop()
+        engine.inputNode.removeTap(onBus: 0)
+        engine = AVAudioEngine()
+
+        let input = engine.inputNode
+        engine.prepare()
+
+        // Advisory only, to fail early when there is genuinely no input device.
+        // Deliberately not used as the tap format: a Bluetooth headset sitting in
+        // its output-only profile reports the stale rate here (48 kHz for a
+        // device that will run at 24 kHz once the input opens), and a tap
+        // installed against a format the hardware disagrees with delivers nothing
+        // at all, silently. That produced whole sessions of `mic=0.0s`.
+        let advertised = input.inputFormat(forBus: 0)
+        let fallback = input.outputFormat(forBus: 0)
+        if ProcessInfo.processInfo.environment["LISTNR_DEBUG_MIC"] != nil {
+            FileHandle.standardError.write(Data(String(
+                format: "  [debug] inputFormat %.0f Hz %d ch · outputFormat %.0f Hz %d ch\n",
+                advertised.sampleRate, advertised.channelCount,
+                fallback.sampleRate, fallback.channelCount
+            ).utf8))
+        }
+        guard advertised.sampleRate >= 1000 || fallback.sampleRate >= 1000 else {
+            throw CaptureError.invalidInputFormat
+        }
+
+        // nil means "whatever this bus actually produces", the only value that
+        // cannot contradict the hardware.
+        input.installTap(onBus: 0, bufferSize: 4096, format: nil) { [weak self] buffer, when in
+            self?.process(buffer: buffer, when: when, resampler: resampler)
+        }
+
+        // Opening the input is what makes a Bluetooth headset switch profile, and
+        // the switch invalidates this engine. The notification is how macOS says
+        // so, and rebuilding is the only way back to a working tap.
+        observer = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: nil
+        ) { [weak self] _ in
+            self?.handleConfigurationChange(resampler: resampler)
         }
 
         do {
@@ -89,53 +191,54 @@ final class MicCapture {
             input.removeTap(onBus: 0)
             throw CaptureError.engineStartFailed(error)
         }
-
-        isRecording = true
-        FileHandle.standardError.write(Data(
-            String(format: "  mic format %.0f Hz · %d ch\n", inputFormat.sampleRate, inputFormat.channelCount).utf8
-        ))
     }
 
-    @discardableResult
-    func stop() -> [Float] {
-        guard isRecording else { return [] }
-        engine.stop()
-        engine.inputNode.removeTap(onBus: 0)
-        isRecording = false
+    private func handleConfigurationChange(resampler: ResampleCache) {
+        engineLock.lock()
+        let recording = isRecording
+        let attempt = rebuilds
+        if recording, attempt < Self.maxRebuilds { rebuilds += 1 }
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
+            self.observer = nil
+        }
+        engineLock.unlock()
 
+        guard recording else { return }
+        guard attempt < Self.maxRebuilds else {
+            FileHandle.standardError.write(Data(
+                ("\r\u{001B}[K! mic device kept changing format; giving up after "
+                    + "\(Self.maxRebuilds) attempts. Try a wired or USB microphone.\n").utf8
+            ))
+            return
+        }
+
+        // The new device may have a different format, so let it be reported.
         lock.lock()
-        let captured = samples
-        samples.removeAll(keepingCapacity: true)
+        announcedFormat = false
         lock.unlock()
-        return captured
+
+        do {
+            try buildEngine(resampler: resampler)
+        } catch {
+            FileHandle.standardError.write(Data(
+                "\r\u{001B}[K! mic restart after device change failed: \(error.localizedDescription)\n".utf8
+            ))
+        }
     }
+
+    // MARK: - Sample handling
 
     private func process(
         buffer: AVAudioPCMBuffer,
         when: AVAudioTime,
-        converter: AVAudioConverter,
-        targetFormat: AVAudioFormat
+        resampler: ResampleCache
     ) {
-        let ratio = targetFormat.sampleRate / buffer.format.sampleRate
-        let outCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 64
-
-        guard let outBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outCapacity) else {
-            return
-        }
-
-        // A box rather than a captured `var`: the input block is @Sendable, so
-        // mutating captured state in it is a race under Swift 6.
-        let feed = ConverterFeed(buffer)
-
-        var error: NSError?
-        let status = converter.convert(to: outBuffer, error: &error, withInputFrom: feed.inputBlock)
-        guard status != .error, let channelData = outBuffer.floatChannelData else { return }
-
-        let count = Int(outBuffer.frameLength)
-        guard count > 0 else { return }
-        let chunk = Array(UnsafeBufferPointer(start: channelData[0], count: count))
+        guard let chunk = resampler.resample(buffer), !chunk.isEmpty else { return }
 
         lock.lock()
+        let announce = !announcedFormat
+        if announce { announcedFormat = true }
         if firstSampleHostSeconds == nil, when.isHostTimeValid {
             // Timestamp of the *start* of this buffer, on the host clock. That
             // is the same clock ScreenCaptureKit stamps Lane B with, so the two
@@ -144,6 +247,15 @@ final class MicCapture {
         }
         samples.append(contentsOf: chunk)
         lock.unlock()
+
+        // Reported from the first buffer that actually arrived, so the number on
+        // screen is the format being converted rather than one predicted before
+        // any audio existed. By then the level meter is redrawing itself in
+        // place, so the line is cleared first (\r plus erase-to-end) or the meter
+        // overwrites it on its next tick.
+        if announce, let description = resampler.currentInputDescription {
+            FileHandle.standardError.write(Data("\r\u{001B}[K  mic format \(description)\n".utf8))
+        }
 
         onLevel?(AudioMath.rms(chunk))
         onSamples?(chunk)
